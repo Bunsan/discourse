@@ -5,12 +5,12 @@ export default Ember.Object.extend({
 
   @computed("defaultIcon")
   renderDiv(defaultIcon) {
-    return (defaultIcon || this.get("statuses").length > 0) && !this.noDiv;
+    return (defaultIcon || this.statuses.length > 0) && !this.noDiv;
   },
 
   @computed
   statuses() {
-    const topic = this.get("topic");
+    const topic = this.topic;
     const results = [];
 
     // TODO, custom statuses? via override?
@@ -45,15 +45,15 @@ export default Ember.Object.extend({
     }
 
     if (topic.get("pinned")) {
-      results.push({ icon: "thumb-tack", key: "pinned" });
+      results.push({ icon: "thumbtack", key: "pinned" });
     }
 
     if (topic.get("unpinned")) {
-      results.push({ icon: "thumb-tack unpinned", key: "unpinned" });
+      results.push({ icon: "thumbtack", key: "unpinned" });
     }
 
     if (topic.get("invisible")) {
-      results.push({ icon: "eye-slash", key: "invisible" });
+      results.push({ icon: "far-eye-slash", key: "unlisted" });
     }
 
     results.forEach(result => {
@@ -70,11 +70,10 @@ export default Ember.Object.extend({
       }
     });
 
-    let defaultIcon = this.get("defaultIcon");
+    let defaultIcon = this.defaultIcon;
     if (results.length === 0 && defaultIcon) {
       this.set("showDefault", defaultIcon);
     }
-
     return results;
   }
 });

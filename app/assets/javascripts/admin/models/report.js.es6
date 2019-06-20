@@ -8,7 +8,7 @@ import { renderAvatar } from "discourse/helpers/user-avatar";
 
 // Change this line each time report format change
 // and you want to ensure cache is reset
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const Report = Discourse.Model.extend({
   average: false,
@@ -62,42 +62,52 @@ const Report = Discourse.Model.extend({
       let d,
         sum = 0,
         count = 0;
-      _.each(this.data, datum => {
+      this.data.forEach(datum => {
         d = moment(datum.x);
         if (d >= earliestDate && d <= latestDate) {
           sum += datum.y;
           count++;
         }
       });
-      if (this.get("method") === "average" && count > 0) {
+      if (this.method === "average" && count > 0) {
         sum /= count;
       }
       return round(sum, -2);
     }
   },
 
-  todayCount: function() {
+  @computed("data", "average")
+  todayCount() {
     return this.valueAt(0);
-  }.property("data", "average"),
-  yesterdayCount: function() {
-    return this.valueAt(1);
-  }.property("data", "average"),
-  sevenDaysAgoCount: function() {
-    return this.valueAt(7);
-  }.property("data", "average"),
-  thirtyDaysAgoCount: function() {
-    return this.valueAt(30);
-  }.property("data", "average"),
+  },
 
-  lastSevenDaysCount: function() {
+  @computed("data", "average")
+  yesterdayCount() {
+    return this.valueAt(1);
+  },
+
+  @computed("data", "average")
+  sevenDaysAgoCount() {
+    return this.valueAt(7);
+  },
+
+  @computed("data", "average")
+  thirtyDaysAgoCount() {
+    return this.valueAt(30);
+  },
+
+  @computed("data", "average")
+  lastSevenDaysCount() {
     return this.averageCount(7, this.valueFor(1, 7));
-  }.property("data", "average"),
-  lastThirtyDaysCount: function() {
+  },
+
+  @computed("data", "average")
+  lastThirtyDaysCount() {
     return this.averageCount(30, this.valueFor(1, 30));
-  }.property("data", "average"),
+  },
 
   averageCount(count, value) {
-    return this.get("average") ? value / count : value;
+    return this.average ? value / count : value;
   },
 
   @computed("yesterdayCount", "higher_is_better")
@@ -116,7 +126,7 @@ const Report = Discourse.Model.extend({
 
   @computed("data")
   currentTotal(data) {
-    return _.reduce(data, (cur, pair) => cur + pair.y, 0);
+    return data.reduce((cur, pair) => cur + pair.y, 0);
   },
 
   @computed("data", "currentTotal")
@@ -148,7 +158,7 @@ const Report = Discourse.Model.extend({
 
   @computed("prev_period", "currentTotal", "currentAverage", "higher_is_better")
   trend(prev, currentTotal, currentAverage, higherIsBetter) {
-    const total = this.get("average") ? currentAverage : currentTotal;
+    const total = this.average ? currentAverage : currentTotal;
     return this._computeTrend(prev, total, higherIsBetter);
   },
 
@@ -180,12 +190,12 @@ const Report = Discourse.Model.extend({
 
   @computed("prev_period", "currentTotal", "currentAverage")
   trendTitle(prev, currentTotal, currentAverage) {
-    let current = this.get("average") ? currentAverage : currentTotal;
+    let current = this.average ? currentAverage : currentTotal;
     let percent = this.percentChangeString(prev, current);
 
-    if (this.get("average")) {
+    if (this.average) {
       prev = prev ? prev.toFixed(1) : "0";
-      if (this.get("percent")) {
+      if (this.percent) {
         current += "%";
         prev += "%";
       }
@@ -236,7 +246,7 @@ const Report = Discourse.Model.extend({
 
   @computed("data")
   sortedData(data) {
-    return this.get("xAxisIsDate") ? data.toArray().reverse() : data.toArray();
+    return this.xAxisIsDate ? data.toArray().reverse() : data.toArray();
   },
 
   @computed("data")
@@ -264,7 +274,13 @@ const Report = Discourse.Model.extend({
         mainProperty,
         type,
         compute: (row, opts = {}) => {
-          const value = row[mainProperty];
+          let value = null;
+
+          if (opts.useSortProperty) {
+            value = row[label.sort_property || mainProperty];
+          } else {
+            value = row[mainProperty];
+          }
 
           if (type === "user") return this._userLabel(label.properties, row);
           if (type === "post") return this._postLabel(label.properties, row);
@@ -272,12 +288,17 @@ const Report = Discourse.Model.extend({
           if (type === "seconds") return this._secondsLabel(value);
           if (type === "link") return this._linkLabel(label.properties, row);
           if (type === "percent") return this._percentLabel(value);
+          if (type === "bytes") return this._bytesLabel(value);
           if (type === "number") {
             return this._numberLabel(value, opts);
           }
           if (type === "date") {
-            const date = moment(value, "YYYY-MM-DD");
+            const date = moment(value);
             if (date.isValid()) return this._dateLabel(value, date);
+          }
+          if (type === "precise_date") {
+            const date = moment(value);
+            if (date.isValid()) return this._dateLabel(value, date, "LLL");
           }
           if (type === "text") return this._textLabel(value);
 
@@ -304,7 +325,7 @@ const Report = Discourse.Model.extend({
         avatar_template: row[properties.avatar]
       });
 
-      const href = `/admin/users/${userId}/${username}`;
+      const href = Discourse.getURL(`/admin/users/${userId}/${username}`);
 
       const avatarImg = renderAvatar(user, {
         imageSize: "tiny",
@@ -327,8 +348,8 @@ const Report = Discourse.Model.extend({
 
     const formatedValue = () => {
       const topicId = row[properties.id];
-      const href = `/t/-/${topicId}`;
-      return `<a href='${href}'>${topicTitle}</a>`;
+      const href = Discourse.getURL(`/t/-/${topicId}`);
+      return `<a href='${href}'>${escapeExpression(topicTitle)}</a>`;
     };
 
     return {
@@ -341,12 +362,15 @@ const Report = Discourse.Model.extend({
     const postTitle = row[properties.truncated_raw];
     const postNumber = row[properties.number];
     const topicId = row[properties.topic_id];
-    const href = `/t/-/${topicId}/${postNumber}`;
+    const href = Discourse.getURL(`/t/-/${topicId}/${postNumber}`);
 
     return {
       property: properties.title,
       value: postTitle,
-      formatedValue: `<a href='${href}'>${postTitle}</a>`
+      formatedValue:
+        postTitle && href
+          ? `<a href='${href}'>${escapeExpression(postTitle)}</a>`
+          : "—"
     };
   },
 
@@ -377,10 +401,17 @@ const Report = Discourse.Model.extend({
     };
   },
 
-  _dateLabel(value, date) {
+  _bytesLabel(value) {
     return {
       value,
-      formatedValue: value ? date.format("LL") : "—"
+      formatedValue: I18n.toHumanSize(value)
+    };
+  },
+
+  _dateLabel(value, date, format = "LL") {
+    return {
+      value,
+      formatedValue: value ? date.format(format) : "—"
     };
   },
 
@@ -395,7 +426,7 @@ const Report = Discourse.Model.extend({
 
   _linkLabel(properties, row) {
     const property = properties[0];
-    const value = row[property];
+    const value = Discourse.getURL(row[property]);
     const formatedValue = (href, anchor) => {
       return `<a href="${escapeExpression(href)}">${escapeExpression(
         anchor
@@ -460,11 +491,27 @@ Report.reopenClass({
         .utc(report[endDate])
         .locale("en")
         .format("YYYY-MM-DD");
-      report[filledField] = fillMissingDates(
-        JSON.parse(JSON.stringify(report[dataField])),
-        startDateFormatted,
-        endDateFormatted
-      );
+
+      if (report.modes[0] === "stacked_chart") {
+        report[filledField] = report[dataField].map(rep => {
+          return {
+            req: rep.req,
+            label: rep.label,
+            color: rep.color,
+            data: fillMissingDates(
+              JSON.parse(JSON.stringify(rep.data)),
+              startDateFormatted,
+              endDateFormatted
+            )
+          };
+        });
+      } else {
+        report[filledField] = fillMissingDates(
+          JSON.parse(JSON.stringify(report[dataField])),
+          startDateFormatted,
+          endDateFormatted
+        );
+      }
     }
   },
 

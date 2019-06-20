@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_dependency 'method_profiler'
+require 'method_profiler'
 
 # This module allows us to hijack a request and send it to the client in the deferred job queue
 # For cases where we are making remote calls like onebox or proxying files and so on this helps
@@ -108,7 +108,7 @@ module Hijack
                 db_runtime = timings[:sql][:duration]
               end
 
-              subscriber = Lograge::RequestLogSubscriber.new
+              subscriber = Lograge::LogSubscribers::ActionController.new
               payload = ActiveSupport::HashWithIndifferentAccess.new(
                 controller: self.class.name,
                 action: action_name,

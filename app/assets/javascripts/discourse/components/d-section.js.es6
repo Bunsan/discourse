@@ -5,19 +5,19 @@ export default Ember.Component.extend({
   tagName: "section",
 
   didInsertElement() {
-    this._super();
+    this._super(...arguments);
 
-    const pageClass = this.get("pageClass");
+    const pageClass = this.pageClass;
     if (pageClass) {
       $("body").addClass(`${pageClass}-page`);
     }
 
-    const bodyClass = this.get("bodyClass");
+    const bodyClass = this.bodyClass;
     if (bodyClass) {
       $("body").addClass(bodyClass);
     }
 
-    if (this.get("scrollTop") === "false") {
+    if (this.scrollTop === "false") {
       return;
     }
 
@@ -25,13 +25,13 @@ export default Ember.Component.extend({
   },
 
   willDestroyElement() {
-    this._super();
-    const pageClass = this.get("pageClass");
+    this._super(...arguments);
+    const pageClass = this.pageClass;
     if (pageClass) {
       $("body").removeClass(`${pageClass}-page`);
     }
 
-    const bodyClass = this.get("bodyClass");
+    const bodyClass = this.bodyClass;
     if (bodyClass) {
       $("body").removeClass(bodyClass);
     }

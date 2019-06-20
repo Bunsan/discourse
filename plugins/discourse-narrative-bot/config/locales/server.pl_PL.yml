@@ -93,7 +93,6 @@ pl_PL:
         '8': "Perspektywy są dobre"
         '9': "Tak"
         '10': "Wszystkie znaki wskazują na to, że tak"
-        '11': "Odpowiedź niejasna, spróbuj ponownie"
         '12': "Spytaj ponownie później"
         '13': "Lepiej, abym Ci teraz nie mówił"
         '14': "Nie mogę teraz tego przewidzieć"
@@ -112,11 +111,6 @@ pl_PL:
       random_mention:
         reply: |-
           Hej! Aby dowiedzieć się, co mogę zrobić, powiedz `@%{discobot_username} %{help_trigger}`.
-        tracks: |-
-          Aktualnie wiem jak zrobić następujące rzeczy:
-
-          `@%{discobot_username} %{reset_trigger} %{default_track}`
-          > Rozpoczyna jedną z następujących akcji: %{tracks}.
         bot_actions: |-
           `@%{discobot_username} %{dice_trigger} 2d6`
           > :game_die: 3, 6
@@ -135,23 +129,12 @@ pl_PL:
         second_response: |-
           Przepraszam. Ciągle nie rozumiem :anguished:
 
-          Jeżeli chcesz się skontaktować z prawdziwą osobą odwiedź naszą [stronę kontaktową](/about).
+          Jeżeli chcesz się skontaktować z prawdziwą osobą odwiedź naszą [stronę kontaktową](%{base_path}/about).
 
           W międzyczasie nie będę Ci już przeszkadzał.
     new_user_narrative:
-      reset_trigger: "nowy użytkownik"
       cert_title: "W podziękowaniu za skończony samouczek"
-      hello:
-        title: ":robot: Witaj!"
       onebox:
-        instructions: |-
-          Następnie, czy możesz udostępnić mi jeden z poniższych linków? Odpowiedz przy użyciu **link**, a automatycznie zostanie dodane dobre podsumowanie.
-
-          Aby skopiować link, naciśnij i przytrzymaj na telefonie, lub kliknij prawym przyciskiem myszy.
-
-          - https://en.wikipedia.org/wiki/Inherently_funny_word
-          - https://en.wikipedia.org/wiki/Death_by_coconut
-          - https://en.wikipedia.org/wiki/Calculator_spelling
         not_found: |-
           Przepraszam, nie mogłem znaleźć linku w twojej odpowiedzi!
           :cry:
@@ -173,7 +156,6 @@ pl_PL:
       formatting:
         instructions: |-
           Czy możesz **pogrubić** lub zastosować _kursywę_ dla części słów w swojej odpowiedzi?
-
 
           - napisz '**pogrub**' lub '_kursywa_'
 
@@ -232,7 +214,6 @@ pl_PL:
       certificate:
         alt: 'Certyfikat osiągnięcia'
     advanced_user_narrative:
-      reset_trigger: 'zaawansowany użytkownik'
       cert_title: "W uznaniu za pomyślne ukończenie tutorialu zaawansowanego użytkownika."
       title: ':arrow_up: Zaawansowane opcje użytkownika'
       edit:
@@ -254,10 +235,6 @@ pl_PL:
         deleted_post_raw: 'Dlaczego @%{discobot_username} usunął mój post?
 
           :anguished:'
-        reply: |-
-          Phew, było blisko! Dzięki za pomoc!  :wink:
-
-          Pamiętaj, że masz tylko 24 godziny, aby przywrócić post.
       category_hashtag:
         instructions: |-
           Czy wiesz, że możesz się odwoływać do kategorii i tagów w swoim poście? Na przykład, czy widziałeś kategorię %{category}?

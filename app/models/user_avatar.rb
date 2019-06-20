@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 require_dependency 'letter_avatar'
 require_dependency 'upload_creator'
 
 class UserAvatar < ActiveRecord::Base
   belongs_to :user
-  belongs_to :gravatar_upload, class_name: 'Upload', dependent: :destroy
-  belongs_to :custom_upload, class_name: 'Upload', dependent: :destroy
+  belongs_to :gravatar_upload, class_name: 'Upload'
+  belongs_to :custom_upload, class_name: 'Upload'
 
   def contains_upload?(id)
     gravatar_upload_id == id || custom_upload_id == id
@@ -16,6 +18,10 @@ class UserAvatar < ActiveRecord::Base
         self.update!(last_gravatar_download_attempt: Time.now)
 
         max = Discourse.avatar_sizes.max
+
+        # The user could be deleted before this executes
+        return if user.blank? || user.primary_email.blank?
+
         email_hash = user_id == Discourse::SYSTEM_USER_ID ? User.email_hash("info@discourse.org") : user.email_hash
         gravatar_url = "https://www.gravatar.com/avatar/#{email_hash}.png?s=#{max}&d=404"
 
@@ -46,7 +52,6 @@ class UserAvatar < ActiveRecord::Base
                 user.update!(uploaded_avatar_id: upload.id)
               end
 
-              gravatar_upload&.destroy!
               self.update!(gravatar_upload: upload)
             end
           end

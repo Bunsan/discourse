@@ -1,6 +1,7 @@
+# frozen_string_literal: true
+
 class SearchLogsSerializer < ApplicationSerializer
   attributes :term,
              :searches,
-             :click_through,
-             :unique_searches
+             :ctr
 end

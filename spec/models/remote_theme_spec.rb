@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe RemoteTheme do
@@ -9,7 +11,7 @@ describe RemoteTheme do
       `cd #{repo_dir} && git init . `
       `cd #{repo_dir} && git config user.email 'someone@cool.com'`
       `cd #{repo_dir} && git config user.name 'The Cool One'`
-      `cd #{repo_dir} && mkdir desktop mobile common assets`
+      `cd #{repo_dir} && mkdir desktop mobile common assets locales scss stylesheets`
       files.each do |name, data|
         File.write("#{repo_dir}/#{name}", data)
         `cd #{repo_dir} && git add #{name}`
@@ -18,22 +20,16 @@ describe RemoteTheme do
       repo_dir
     end
 
-    def about_json(love_color: "FAFAFA", color_scheme_name: "Amazing")
+    def about_json(love_color: "FAFAFA", color_scheme_name: "Amazing", about_url: "https://www.site.com/about")
       <<~JSON
         {
           "name": "awesome theme",
-          "about_url": "https://www.site.com/about",
+          "about_url": "#{about_url}",
           "license_url": "https://www.site.com/license",
+          "theme_version": "1.0",
+          "minimum_discourse_version": "1.0.0",
           "assets": {
-            "font": "assets/awesome.woff2"
-          },
-          "fields": {
-            "color": {
-              "target": "desktop",
-              "value": "#FEF",
-              "type": "color"
-            },
-            "name": "sam"
+            "font": "assets/font.woff2"
           },
           "color_schemes": {
             "#{color_scheme_name}": {
@@ -52,11 +48,15 @@ describe RemoteTheme do
       setup_git_repo(
         "about.json" => about_json,
         "desktop/desktop.scss" => scss_data,
+        "scss/oldpath.scss" => ".class2{color:blue}",
+        "stylesheets/file.scss" => ".class1{color:red}",
+        "stylesheets/empty.scss" => "",
         "common/header.html" => "I AM HEADER",
         "common/random.html" => "I AM SILLY",
         "common/embedded.scss" => "EMBED",
-        "assets/awesome.woff2" => "FAKE FONT",
-        "settings.yaml" => "boolean_setting: true"
+        "assets/font.woff2" => "FAKE FONT",
+        "settings.yaml" => "boolean_setting: true",
+        "locales/en.yml" => "sometranslations"
       )
     end
 
@@ -79,22 +79,23 @@ describe RemoteTheme do
 
       expect(remote.about_url).to eq("https://www.site.com/about")
       expect(remote.license_url).to eq("https://www.site.com/license")
+      expect(remote.theme_version).to eq("1.0")
+      expect(remote.minimum_discourse_version).to eq("1.0.0")
 
-      expect(@theme.theme_fields.length).to eq(7)
+      expect(@theme.theme_fields.length).to eq(8)
 
       mapped = Hash[*@theme.theme_fields.map { |f| ["#{f.target_id}-#{f.name}", f.value] }.flatten]
-
       expect(mapped["0-header"]).to eq("I AM HEADER")
       expect(mapped["1-scss"]).to eq(scss_data)
       expect(mapped["0-embedded_scss"]).to eq("EMBED")
 
-      expect(mapped["1-color"]).to eq("#FEF")
       expect(mapped["0-font"]).to eq("")
-      expect(mapped["0-name"]).to eq("sam")
 
       expect(mapped["3-yaml"]).to eq("boolean_setting: true")
 
-      expect(mapped.length).to eq(7)
+      expect(mapped["4-en"]).to eq("sometranslations")
+
+      expect(mapped.length).to eq(8)
 
       expect(@theme.settings.length).to eq(1)
       expect(@theme.settings.first.value).to eq(true)
@@ -105,13 +106,17 @@ describe RemoteTheme do
       expect(scheme.name).to eq("Amazing")
       expect(scheme.colors.find_by(name: 'love').hex).to eq('fafafa')
 
+      expect(@theme.color_scheme_id).to eq(scheme.id)
+      @theme.update(color_scheme_id: nil)
+
       File.write("#{initial_repo}/common/header.html", "I AM UPDATED")
-      File.write("#{initial_repo}/about.json", about_json(love_color: "EAEAEA"))
+      File.write("#{initial_repo}/about.json", about_json(love_color: "EAEAEA", about_url: "https://newsite.com/about"))
 
       File.write("#{initial_repo}/settings.yml", "integer_setting: 32")
       `cd #{initial_repo} && git add settings.yml`
 
       File.delete("#{initial_repo}/settings.yaml")
+      File.delete("#{initial_repo}/stylesheets/file.scss")
       `cd #{initial_repo} && git commit -am "update"`
 
       time = Time.new('2001')
@@ -122,14 +127,18 @@ describe RemoteTheme do
       expect(remote.remote_version).to eq(`cd #{initial_repo} && git rev-parse HEAD`.strip)
 
       remote.update_from_remote
-      @theme.save
+      @theme.save!
       @theme.reload
 
       scheme = ColorScheme.find_by(theme_id: @theme.id)
       expect(scheme.name).to eq("Amazing")
       expect(scheme.colors.find_by(name: 'love').hex).to eq('eaeaea')
+      expect(@theme.color_scheme_id).to eq(nil) # Should only be set on first import
 
       mapped = Hash[*@theme.theme_fields.map { |f| ["#{f.target_id}-#{f.name}", f.value] }.flatten]
+
+      # Scss file was deleted
+      expect(mapped["5-file"]).to eq(nil)
 
       expect(mapped["0-header"]).to eq("I AM UPDATED")
       expect(mapped["1-scss"]).to eq(scss_data)
@@ -138,6 +147,7 @@ describe RemoteTheme do
       expect(@theme.settings.first.value).to eq(32)
 
       expect(remote.remote_updated_at).to eq(time)
+      expect(remote.about_url).to eq("https://newsite.com/about")
 
       # It should be able to remove old colors as well
       File.write("#{initial_repo}/about.json", about_json(love_color: "BABABA", color_scheme_name: "Amazing 2"))
@@ -149,6 +159,13 @@ describe RemoteTheme do
 
       scheme_count = ColorScheme.where(theme_id: @theme.id).count
       expect(scheme_count).to eq(1)
+
+      # It should detect local changes
+      @theme.set_field(target: :common, name: :scss, value: 'body {background-color: blue};')
+      @theme.save
+      @theme.reload
+
+      expect(remote.diff_local_changes[:diff]).to include("background-color: blue")
     end
   end
 

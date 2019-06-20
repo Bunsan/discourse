@@ -22,6 +22,7 @@ function unlessReadOnly(method, message) {
 
 const ApplicationRoute = Discourse.Route.extend(OpenComposer, {
   siteTitle: setting("title"),
+  shortSiteDescription: setting("short_site_description"),
 
   actions: {
     toggleAnonymous() {
@@ -40,7 +41,13 @@ const ApplicationRoute = Discourse.Route.extend(OpenComposer, {
     ),
 
     _collectTitleTokens(tokens) {
-      tokens.push(this.get("siteTitle"));
+      tokens.push(this.siteTitle);
+      if (
+        window.location.pathname === Discourse.getURL("/") &&
+        this.shortSiteDescription !== ""
+      ) {
+        tokens.push(this.shortSiteDescription);
+      }
       Discourse.set("_docTitle", tokens.join(" - "));
     },
 
@@ -48,14 +55,14 @@ const ApplicationRoute = Discourse.Route.extend(OpenComposer, {
     willTransition() {
       var router = getOwner(this).lookup("router:main");
       Ember.run.once(router, router.trigger, "willTransition");
-      return this._super();
+      return this._super(...arguments);
     },
 
     postWasEnqueued(details) {
-      const title = details.reason
-        ? "queue_reason." + details.reason + ".title"
-        : "queue.approval.title";
-      showModal("post-enqueued", { model: details, title });
+      showModal("post-enqueued", {
+        model: details,
+        title: "review.approval.title"
+      });
     },
 
     composePrivateMessage(user, post) {
@@ -144,6 +151,13 @@ const ApplicationRoute = Discourse.Route.extend(OpenComposer, {
     // Close the current modal, and destroy its state.
     closeModal() {
       this.render("hide-modal", { into: "modal", outlet: "modalBody" });
+
+      const route = getOwner(this).lookup("route:application");
+      const name = route.controllerFor("modal").get("name");
+      const controller = getOwner(this).lookup(`controller:${name}`);
+      if (controller && controller.onClose) {
+        controller.onClose();
+      }
     },
 
     /**
@@ -199,8 +213,8 @@ const ApplicationRoute = Discourse.Route.extend(OpenComposer, {
   },
 
   activate() {
-    this._super();
-    Em.run.next(function() {
+    this._super(...arguments);
+    Ember.run.next(function() {
       // Support for callbacks once the application has activated
       ApplicationRoute.trigger("activate");
     });
@@ -238,14 +252,12 @@ const ApplicationRoute = Discourse.Route.extend(OpenComposer, {
   },
 
   _autoLogin(modal, modalClass, notAuto) {
-    const methods = findAll(
-      this.siteSettings,
-      getOwner(this).lookup("capabilities:main"),
-      this.site.isMobileDevice
-    );
+    const methods = findAll();
 
     if (!this.siteSettings.enable_local_logins && methods.length === 1) {
-      this.controllerFor("login").send("externalLogin", methods[0]);
+      this.controllerFor("login").send("externalLogin", methods[0], {
+        fullScreenLogin: true
+      });
     } else {
       showModal(modal);
       this.controllerFor("modal").set("modalClass", modalClass);

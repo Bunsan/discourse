@@ -13,7 +13,7 @@ export default {
   @observes("archetype")
   @on("init")
   _archetypeChanged() {
-    const archetype = this.get("archetype");
+    const archetype = this.archetype;
     this._cleanUp();
 
     if (archetype) {
@@ -22,7 +22,7 @@ export default {
   },
 
   willDestroyElement() {
-    this._super();
+    this._super(...arguments);
     this._cleanUp();
   }
 };

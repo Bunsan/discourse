@@ -17,13 +17,13 @@ export default Ember.Controller.extend({
     });
   },
 
-  disabled: Em.computed.empty("notificationLevelId"),
+  disabled: Ember.computed.empty("notificationLevelId"),
 
   actions: {
     changeNotificationLevel() {
-      this.get("topicBulkActions").performAndRefresh({
+      this.topicBulkActions.performAndRefresh({
         type: "change_notification_level",
-        notification_level_id: this.get("notificationLevelId")
+        notification_level_id: this.notificationLevelId
       });
     }
   }

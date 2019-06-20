@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency "file_helper"
 
 module Validators; end
@@ -6,7 +8,7 @@ class Validators::UploadValidator < ActiveModel::Validator
 
   def validate(upload)
     # staff can upload any file in PM
-    if upload.for_private_message && SiteSetting.allow_staff_to_upload_any_file_in_pm
+    if (upload.for_private_message && SiteSetting.allow_staff_to_upload_any_file_in_pm)
       return true if upload.user&.staff?
     end
 
@@ -16,6 +18,13 @@ class Validators::UploadValidator < ActiveModel::Validator
     end
 
     extension = File.extname(upload.original_filename)[1..-1] || ""
+
+    if upload.for_site_setting &&
+       upload.user&.staff? &&
+       FileHelper.is_supported_image?(upload.original_filename)
+
+      return true
+    end
 
     if is_authorized?(upload, extension)
       if FileHelper.is_supported_image?(upload.original_filename)
@@ -116,8 +125,9 @@ class Validators::UploadValidator < ActiveModel::Validator
     max_size_kb = if upload.for_export
       SiteSetting.max_export_file_size_kb
     else
-      SiteSetting.send("max_#{type}_size_kb")
+      SiteSetting.get("max_#{type}_size_kb")
     end
+
     max_size_bytes = max_size_kb.kilobytes
 
     if upload.filesize > max_size_bytes

@@ -16,7 +16,7 @@ fa_IR:
         other: "مجموع آرا"
       average_rating: "میانگین امتیاز:  <strong>%{average}</strong>."
       public:
-        title: "آرا عمومی هستند"
+        title: "آرا <strong>عمومی</strong> هستند."
       multiple:
         help:
           at_least_min_options:
@@ -60,6 +60,8 @@ fa_IR:
           regular: یک انتخابی
           multiple: چند انتخابی
           number: امتیاز عددی
+        poll_result:
+          label: نتایج
         poll_config:
           max: بیشترین
           min: کمترین

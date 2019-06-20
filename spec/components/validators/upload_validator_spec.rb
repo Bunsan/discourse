@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 require_dependency 'validators/upload_validator'
 
@@ -5,7 +7,7 @@ describe Validators::UploadValidator do
   subject(:validator) { described_class.new }
 
   describe 'validate' do
-    let(:user) { Fabricate(:user) }
+    fab!(:user) { Fabricate(:user) }
     let(:filename) { "discourse.csv" }
     let(:csv_file) { file_from_fixtures(filename, "csv") }
 
@@ -28,6 +30,67 @@ describe Validators::UploadValidator do
       SiteSetting.authorized_extensions = "gz"
 
       expect(UploadCreator.new(csv_file, "#{filename}.gz", for_export: true).create_for(user.id)).to be_valid
+    end
+
+    describe 'when allow_staff_to_upload_any_file_in_pm is true' do
+      it 'should allow uploads for pm' do
+        upload = Fabricate.build(:upload,
+          user: Fabricate(:admin),
+          original_filename: 'test.ico',
+          for_private_message: true
+        )
+
+        expect(subject.validate(upload)).to eq(true)
+      end
+
+      describe 'for a normal user' do
+        it 'should not allow uploads for pm' do
+          upload = Fabricate.build(:upload,
+            user: Fabricate(:user),
+            original_filename: 'test.ico',
+            for_private_message: true
+          )
+
+          expect(subject.validate(upload)).to eq(nil)
+        end
+      end
+    end
+
+    describe 'upload for site settings' do
+      fab!(:user) { Fabricate(:admin) }
+
+      let(:upload) do
+        Fabricate.build(:upload,
+          user: user,
+          original_filename: 'test.ico',
+          for_site_setting: true
+        )
+      end
+
+      before do
+        SiteSetting.authorized_extensions = 'png'
+      end
+
+      describe 'for admin user' do
+        it 'should allow the upload' do
+          expect(subject.validate(upload)).to eq(true)
+        end
+
+        describe 'when filename is invalid' do
+          it 'should not allow the upload' do
+            upload.original_filename = 'test.txt'
+            expect(subject.validate(upload)).to eq(nil)
+          end
+        end
+      end
+
+      describe 'for normal user' do
+        fab!(:user) { Fabricate(:user) }
+
+        it 'should not allow the upload' do
+          expect(subject.validate(upload)).to eq(nil)
+        end
+      end
     end
   end
 end

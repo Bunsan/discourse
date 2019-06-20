@@ -9,6 +9,12 @@ import {
 import Ember from "ember";
 
 export default Ember.Controller.extend(ModalFunctionality, Ember.Evented, {
+  init() {
+    this._super(...arguments);
+
+    this.categoriesSorting = ["position"];
+  },
+
   @on("init")
   _fixOrder() {
     this.fixIndices();
@@ -20,28 +26,51 @@ export default Ember.Controller.extend(ModalFunctionality, Ember.Evented, {
     return categories.map(c => bufProxy.create({ content: c }));
   },
 
-  categoriesSorting: ["position"],
   categoriesOrdered: Ember.computed.sort(
     "categoriesBuffered",
     "categoriesSorting"
   ),
 
-  showApplyAll: function() {
+  @computed("categoriesBuffered.@each.hasBufferedChanges")
+  showApplyAll() {
     let anyChanged = false;
-    this.get("categoriesBuffered").forEach(bc => {
+    this.categoriesBuffered.forEach(bc => {
       anyChanged = anyChanged || bc.get("hasBufferedChanges");
     });
     return anyChanged;
-  }.property("categoriesBuffered.@each.hasBufferedChanges"),
-
-  saveDisabled: Ember.computed.alias("showApplyAll"),
+  },
 
   moveDir(cat, dir) {
-    const cats = this.get("categoriesOrdered");
-    const curIdx = cats.indexOf(cat);
-    const desiredIdx = curIdx + dir;
+    const cats = this.categoriesOrdered;
+    const curIdx = cat.get("position");
+    let desiredIdx = curIdx + dir;
     if (desiredIdx >= 0 && desiredIdx < cats.get("length")) {
-      const otherCat = cats.objectAt(desiredIdx);
+      let otherCat = cats.objectAt(desiredIdx);
+
+      // Respect children
+      const parentIdx = otherCat.get("parent_category_id");
+      if (parentIdx && parentIdx !== cat.get("parent_category_id")) {
+        if (parentIdx === cat.get("id")) {
+          // We want to move down
+          for (let i = curIdx + 1; i < cats.get("length"); i++) {
+            let tmpCat = cats.objectAt(i);
+            if (!tmpCat.get("parent_category_id")) {
+              desiredIdx = cats.indexOf(tmpCat);
+              otherCat = tmpCat;
+              break;
+            }
+          }
+        } else {
+          // We want to move up
+          cats.forEach(function(tmpCat) {
+            if (tmpCat.get("id") === parentIdx) {
+              desiredIdx = cats.indexOf(tmpCat);
+              otherCat = tmpCat;
+            }
+          });
+        }
+      }
+
       otherCat.set("position", curIdx);
       cat.set("position", desiredIdx);
       this.send("commit");
@@ -60,7 +89,7 @@ export default Ember.Controller.extend(ModalFunctionality, Ember.Evented, {
           parent/c2         other
   **/
   fixIndices() {
-    const categories = this.get("categoriesOrdered");
+    const categories = this.categoriesOrdered;
     const subcategories = {};
 
     categories.forEach(category => {
@@ -82,11 +111,18 @@ export default Ember.Controller.extend(ModalFunctionality, Ember.Evented, {
         );
       }
     }
-
-    this.send("commit");
   },
 
   actions: {
+    change(cat, e) {
+      let position = parseInt($(e.target).val());
+      let amount = Math.min(
+        Math.max(position, 0),
+        this.categoriesOrdered.length - 1
+      );
+      this.moveDir(cat, amount - cat.get("position"));
+    },
+
     moveUp(cat) {
       this.moveDir(cat, -1);
     },
@@ -95,19 +131,21 @@ export default Ember.Controller.extend(ModalFunctionality, Ember.Evented, {
     },
 
     commit() {
-      this.get("categoriesBuffered").forEach(bc => {
+      this.fixIndices();
+
+      this.categoriesBuffered.forEach(bc => {
         if (bc.get("hasBufferedChanges")) {
           bc.applyBufferedChanges();
         }
       });
-      this.propertyDidChange("categoriesBuffered");
+      this.notifyPropertyChange("categoriesBuffered");
     },
 
     saveOrder() {
-      this.fixIndices();
+      this.send("commit");
 
       const data = {};
-      this.get("categoriesBuffered").forEach(cat => {
+      this.categoriesBuffered.forEach(cat => {
         data[cat.get("id")] = cat.get("position");
       });
       ajax("/categories/reorder", {

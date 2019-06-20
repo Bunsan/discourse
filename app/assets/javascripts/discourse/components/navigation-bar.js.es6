@@ -11,7 +11,7 @@ export default Ember.Component.extend({
   elementId: "navigation-bar",
 
   init() {
-    this._super();
+    this._super(...arguments);
     this.set("connectors", renderedConnectorsFor("extra-nav-item", null, this));
   },
 
@@ -24,8 +24,8 @@ export default Ember.Component.extend({
       i => i.get("filterMode").indexOf(filterMode) === 0
     );
     if (!item) {
-      let connectors = this.get("connectors");
-      let category = this.get("category");
+      let connectors = this.connectors;
+      let category = this.category;
       if (connectors && category) {
         connectors.forEach(c => {
           if (
@@ -48,13 +48,13 @@ export default Ember.Component.extend({
 
   @observes("expanded")
   closedNav() {
-    if (!this.get("expanded")) {
+    if (!this.expanded) {
       this.ensureDropClosed();
     }
   },
 
   ensureDropClosed() {
-    if (!this.get("expanded")) {
+    if (!this.expanded) {
       this.set("expanded", false);
     }
     $(window).off("click.navigation-bar");
@@ -63,19 +63,26 @@ export default Ember.Component.extend({
 
   actions: {
     toggleDrop() {
-      this.set("expanded", !this.get("expanded"));
+      this.set("expanded", !this.expanded);
 
-      if (this.get("expanded")) {
+      if (this.expanded) {
         DiscourseURL.appEvents.on("dom:clean", this, this.ensureDropClosed);
 
-        Em.run.next(() => {
-          if (!this.get("expanded")) {
+        Ember.run.next(() => {
+          if (!this.expanded) {
             return;
           }
 
           this.$(".drop a").on("click", () => {
             this.$(".drop").hide();
-            this.set("expanded", false);
+
+            Ember.run.next(() => {
+              if (!this.element || this.isDestroying || this.isDestroyed) {
+                return;
+              }
+              this.set("expanded", false);
+            });
+
             return true;
           });
 

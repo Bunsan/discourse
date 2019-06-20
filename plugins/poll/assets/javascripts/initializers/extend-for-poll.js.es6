@@ -8,7 +8,7 @@ function initializePolls(api) {
 
   api.modifyClass("controller:topic", {
     subscribe() {
-      this._super();
+      this._super(...arguments);
       this.messageBus.subscribe("/polls/" + this.get("model.id"), msg => {
         const post = this.get("model.postStream").findLoadedPost(msg.post_id);
         if (post) {
@@ -18,7 +18,7 @@ function initializePolls(api) {
     },
     unsubscribe() {
       this.messageBus.unsubscribe("/polls/*");
-      this._super();
+      this._super(...arguments);
     }
   });
 
@@ -36,15 +36,15 @@ function initializePolls(api) {
     // we need a proper ember object so it is bindable
     @observes("polls")
     pollsChanged() {
-      const polls = this.get("polls");
+      const polls = this.polls;
       if (polls) {
         this._polls = this._polls || {};
-        _.map(polls, (v, k) => {
-          const existing = this._polls[k];
+        polls.forEach(p => {
+          const existing = this._polls[p.name];
           if (existing) {
-            this._polls[k].setProperties(v);
+            this._polls[p.name].setProperties(p);
           } else {
-            this._polls[k] = Em.Object.create(v);
+            this._polls[p.name] = Ember.Object.create(p);
           }
         });
         this.set("pollsObject", this._polls);
@@ -81,14 +81,11 @@ function initializePolls(api) {
       const pollName = $poll.data("poll-name");
       const poll = polls[pollName];
       if (poll) {
-        const isMultiple = poll.get("type") === "multiple";
-
         const glue = new WidgetGlue("discourse-poll", register, {
           id: `${pollName}-${post.id}`,
           post,
           poll,
-          vote: votes[pollName] || [],
-          isMultiple
+          vote: votes[pollName] || []
         });
         glue.appendTo(pollElem);
         _glued.push(glue);
@@ -107,7 +104,7 @@ function initializePolls(api) {
   }
 
   api.includePostAttributes("polls", "polls_votes");
-  api.decorateCooked(attachPolls, { onlyStream: true });
+  api.decorateCooked(attachPolls, { onlyStream: true, id: "discourse-poll" });
   api.cleanupStream(cleanUpPolls);
 }
 

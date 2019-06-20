@@ -28,16 +28,16 @@ export default Ember.Component.extend({
     return !usernames || !(usernames.length > 0);
   },
 
-  showingFirst: Em.computed.lte("currentPage", 1),
+  showingFirst: Ember.computed.lte("currentPage", 1),
   showingLast: propertyEqual("currentPage", "totalPages"),
 
   actions: {
     next() {
-      if (this.get("showingLast")) {
+      if (this.showingLast) {
         return;
       }
 
-      const group = this.get("model");
+      const group = this.model;
       const offset = Math.min(
         group.get("offset") + group.get("limit"),
         group.get("user_count")
@@ -48,11 +48,11 @@ export default Ember.Component.extend({
     },
 
     previous() {
-      if (this.get("showingFirst")) {
+      if (this.showingFirst) {
         return;
       }
 
-      const group = this.get("model");
+      const group = this.model;
       const offset = Math.max(group.get("offset") - group.get("limit"), 0);
       group.set("offset", offset);
 
@@ -60,12 +60,10 @@ export default Ember.Component.extend({
     },
 
     addMembers() {
-      if (Em.isEmpty(this.get("model.usernames"))) {
+      if (Ember.isEmpty(this.get("model.usernames"))) {
         return;
       }
-      this.get("model")
-        .addMembers(this.get("model.usernames"))
-        .catch(popupAjaxError);
+      this.model.addMembers(this.get("model.usernames")).catch(popupAjaxError);
       this.set("model.usernames", null);
     },
 
@@ -81,7 +79,7 @@ export default Ember.Component.extend({
         I18n.t("yes_value"),
         confirm => {
           if (confirm) {
-            this.get("model").removeMember(member);
+            this.model.removeMember(member);
           }
         }
       );

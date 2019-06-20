@@ -6,24 +6,46 @@ import RestModel from "discourse/models/rest";
 import PreloadStore from "preload-store";
 
 const Site = RestModel.extend({
-  isReadOnly: Em.computed.alias("is_readonly"),
+  isReadOnly: Ember.computed.alias("is_readonly"),
+
+  init() {
+    this._super(...arguments);
+
+    this.topicCountDesc = ["topic_count:desc"];
+  },
 
   @computed("notification_types")
   notificationLookup(notificationTypes) {
     const result = [];
-    _.each(notificationTypes, (v, k) => (result[v] = k));
+    Object.keys(notificationTypes).forEach(
+      k => (result[notificationTypes[k]] = k)
+    );
     return result;
   },
 
   @computed("post_action_types.[]")
   flagTypes() {
-    const postActionTypes = this.get("post_action_types");
+    const postActionTypes = this.post_action_types;
     if (!postActionTypes) return [];
     return postActionTypes.filterBy("is_flag", true);
   },
 
-  topicCountDesc: ["topic_count:desc"],
   categoriesByCount: Ember.computed.sort("categories", "topicCountDesc"),
+
+  collectUserFields(fields) {
+    fields = fields || {};
+
+    let siteFields = this.user_fields;
+
+    if (!Ember.isEmpty(siteFields)) {
+      return siteFields.map(f => {
+        let value = fields ? fields[f.id.toString()] : null;
+        value = value || "&mdash;".htmlSafe();
+        return { name: f.name, value };
+      });
+    }
+    return [];
+  },
 
   // Sort subcategories under parents
   @computed("categoriesByCount", "categories.[]")
@@ -62,8 +84,8 @@ const Site = RestModel.extend({
   @computed
   categoriesList() {
     return this.siteSettings.fixed_category_positions
-      ? this.get("categories")
-      : this.get("sortedCategories");
+      ? this.categories
+      : this.sortedCategories;
   },
 
   postActionTypeById(id) {
@@ -75,17 +97,17 @@ const Site = RestModel.extend({
   },
 
   removeCategory(id) {
-    const categories = this.get("categories");
+    const categories = this.categories;
     const existingCategory = categories.findBy("id", id);
     if (existingCategory) {
       categories.removeObject(existingCategory);
-      delete this.get("categoriesById").categoryId;
+      delete this.categoriesById.categoryId;
     }
   },
 
   updateCategory(newCategory) {
-    const categories = this.get("categories");
-    const categoryId = Em.get(newCategory, "id");
+    const categories = this.categories;
+    const categoryId = Ember.get(newCategory, "id");
     const existingCategory = categories.findBy("id", categoryId);
 
     // Don't update null permissions
@@ -99,7 +121,7 @@ const Site = RestModel.extend({
       // TODO insert in right order?
       newCategory = this.store.createRecord("category", newCategory);
       categories.pushObject(newCategory);
-      this.get("categoriesById")[categoryId] = newCategory;
+      this.categoriesById[categoryId] = newCategory;
     }
   }
 });
@@ -119,7 +141,7 @@ Site.reopenClass(Singleton, {
       let subcatMap = {};
 
       result.categoriesById = {};
-      result.categories = _.map(result.categories, c => {
+      result.categories = result.categories.map(c => {
         if (c.parent_category_id) {
           subcatMap[c.parent_category_id] =
             subcatMap[c.parent_category_id] || [];
@@ -157,8 +179,8 @@ Site.reopenClass(Singleton, {
     }
 
     if (result.post_action_types) {
-      result.postActionByIdLookup = Em.Object.create();
-      result.post_action_types = _.map(result.post_action_types, p => {
+      result.postActionByIdLookup = Ember.Object.create();
+      result.post_action_types = result.post_action_types.map(p => {
         const actionType = PostActionType.create(p);
         result.postActionByIdLookup.set("action" + p.id, actionType);
         return actionType;
@@ -166,8 +188,8 @@ Site.reopenClass(Singleton, {
     }
 
     if (result.topic_flag_types) {
-      result.topicFlagByIdLookup = Em.Object.create();
-      result.topic_flag_types = _.map(result.topic_flag_types, p => {
+      result.topicFlagByIdLookup = Ember.Object.create();
+      result.topic_flag_types = result.topic_flag_types.map(p => {
         const actionType = PostActionType.create(p);
         result.topicFlagByIdLookup.set("action" + p.id, actionType);
         return actionType;
@@ -175,7 +197,7 @@ Site.reopenClass(Singleton, {
     }
 
     if (result.archetypes) {
-      result.archetypes = _.map(result.archetypes, a => {
+      result.archetypes = result.archetypes.map(a => {
         a.site = result;
         return Archetype.create(a);
       });

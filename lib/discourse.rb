@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'cache'
 require 'open3'
 require_dependency 'route_format'
@@ -21,10 +23,10 @@ module Discourse
   end
 
   class Utils
-    def self.execute_command(*command, failure_message: "")
-      stdout, stderr, status = Open3.capture3(*command)
+    def self.execute_command(*command, failure_message: "", success_status_codes: [0], chdir: ".")
+      stdout, stderr, status = Open3.capture3(*command, chdir: chdir)
 
-      if !status.success?
+      if !status.exited? || !success_status_codes.include?(status.exitstatus)
         failure_message = "#{failure_message}\n" if !failure_message.blank?
         raise "#{caller[0]}: #{failure_message}#{stderr}"
       end
@@ -54,6 +56,8 @@ module Discourse
       current_db: cm.current_db,
       current_hostname: cm.current_hostname
     }.merge(context))
+
+    raise ex if Rails.env.test?
   end
 
   # Expected less matches than what we got in a find
@@ -104,6 +108,8 @@ module Discourse
   class CSRF < StandardError; end
 
   class Deprecation < StandardError; end
+
+  class ScssError < StandardError; end
 
   def self.filters
     @filters ||= [:latest, :unread, :new, :read, :posted, :bookmarks]
@@ -213,12 +219,11 @@ module Discourse
   end
 
   BUILTIN_AUTH ||= [
-    Auth::AuthProvider.new(authenticator: Auth::FacebookAuthenticator.new, frame_width: 580, frame_height: 400),
-    Auth::AuthProvider.new(authenticator: Auth::GoogleOAuth2Authenticator.new, frame_width: 850, frame_height: 500),
-    Auth::AuthProvider.new(authenticator: Auth::OpenIdAuthenticator.new("yahoo", "https://me.yahoo.com", 'enable_yahoo_logins', trusted: true)),
-    Auth::AuthProvider.new(authenticator: Auth::GithubAuthenticator.new),
-    Auth::AuthProvider.new(authenticator: Auth::TwitterAuthenticator.new),
-    Auth::AuthProvider.new(authenticator: Auth::InstagramAuthenticator.new, frame_width: 1, frame_height: 1)
+    Auth::AuthProvider.new(authenticator: Auth::FacebookAuthenticator.new, frame_width: 580, frame_height: 400, icon: "fab-facebook"),
+    Auth::AuthProvider.new(authenticator: Auth::GoogleOAuth2Authenticator.new, frame_width: 850, frame_height: 500), # Custom icon implemented in client
+    Auth::AuthProvider.new(authenticator: Auth::GithubAuthenticator.new, icon: "fab-github"),
+    Auth::AuthProvider.new(authenticator: Auth::TwitterAuthenticator.new, icon: "fab-twitter"),
+    Auth::AuthProvider.new(authenticator: Auth::InstagramAuthenticator.new, icon: "fab-instagram")
   ]
 
   def self.auth_providers
@@ -240,7 +245,13 @@ module Discourse
   end
 
   def self.cache
-    @cache ||= Cache.new
+    @cache ||= begin
+      if GlobalSetting.skip_redis?
+        ActiveSupport::Cache::MemoryStore.new
+      else
+        Cache.new
+      end
+    end
   end
 
   # Get the current base URL for the current site
@@ -258,8 +269,13 @@ module Discourse
 
   def self.base_url_no_prefix
     default_port = SiteSetting.force_https? ? 443 : 80
-    url = "#{base_protocol}://#{current_hostname}"
+    url = +"#{base_protocol}://#{current_hostname}"
     url << ":#{SiteSetting.port}" if SiteSetting.port.to_i > 0 && SiteSetting.port.to_i != default_port
+
+    if Rails.env.development? && SiteSetting.port.blank?
+      url << ":#{ENV["UNICORN_PORT"] || 3000}"
+    end
+
     url
   end
 
@@ -277,7 +293,7 @@ module Discourse
 
     return unless uri
 
-    path = uri.path || ""
+    path = +(uri.path || "")
     if !uri.host || (uri.host == Discourse.current_hostname && path.start_with?(Discourse.base_uri))
       path.slice!(Discourse.base_uri)
       return Rails.application.routes.recognize_path(path)
@@ -288,10 +304,15 @@ module Discourse
     nil
   end
 
+  class << self
+    alias_method :base_path, :base_uri
+    alias_method :base_url_no_path, :base_url_no_prefix
+  end
+
   READONLY_MODE_KEY_TTL  ||= 60
-  READONLY_MODE_KEY      ||= 'readonly_mode'.freeze
-  PG_READONLY_MODE_KEY   ||= 'readonly_mode:postgres'.freeze
-  USER_READONLY_MODE_KEY ||= 'readonly_mode:user'.freeze
+  READONLY_MODE_KEY      ||= 'readonly_mode'
+  PG_READONLY_MODE_KEY   ||= 'readonly_mode:postgres'
+  USER_READONLY_MODE_KEY ||= 'readonly_mode:user'
 
   READONLY_KEYS ||= [
     READONLY_MODE_KEY,
@@ -304,31 +325,34 @@ module Discourse
       $redis.set(key, 1)
     else
       $redis.setex(key, READONLY_MODE_KEY_TTL, 1)
-      keep_readonly_mode(key)
+      keep_readonly_mode(key) if !Rails.env.test?
     end
 
     MessageBus.publish(readonly_channel, true)
+    Site.clear_anon_cache!
     true
   end
 
   def self.keep_readonly_mode(key)
     # extend the expiry by 1 minute every 30 seconds
-    unless Rails.env.test?
+    @mutex ||= Mutex.new
+
+    @mutex.synchronize do
       @dbs ||= Set.new
       @dbs << RailsMultisite::ConnectionManagement.current_db
       @threads ||= {}
 
       unless @threads[key]&.alive?
         @threads[key] = Thread.new do
-          while @dbs.size > 0
+          while @dbs.size > 0 do
             sleep 30
 
-            @dbs.each do |db|
-              RailsMultisite::ConnectionManagement.with_connection(db) do
-                if readonly_mode?(key)
-                  $redis.expire(key, READONLY_MODE_KEY_TTL)
-                else
-                  @dbs.delete(db)
+            @mutex.synchronize do
+              @dbs.each do |db|
+                RailsMultisite::ConnectionManagement.with_connection(db) do
+                  if !$redis.expire(key, READONLY_MODE_KEY_TTL)
+                    @dbs.delete(db)
+                  end
                 end
               end
             end
@@ -341,6 +365,7 @@ module Discourse
   def self.disable_readonly_mode(key = READONLY_MODE_KEY)
     $redis.del(key)
     MessageBus.publish(readonly_channel, false)
+    Site.clear_anon_cache!
     true
   end
 
@@ -348,13 +373,17 @@ module Discourse
     recently_readonly? || $redis.mget(*keys).compact.present?
   end
 
+  def self.pg_readonly_mode?
+    $redis.get(PG_READONLY_MODE_KEY).present?
+  end
+
   def self.last_read_only
-    @last_read_only ||= {}
+    @last_read_only ||= DistributedCache.new('last_read_only', namespace: false)
   end
 
   def self.recently_readonly?
-    return false unless read_only = last_read_only[$redis.namespace]
-    read_only > 15.seconds.ago
+    read_only = last_read_only[$redis.namespace]
+    read_only.present? && read_only > 15.seconds.ago
   end
 
   def self.received_readonly!
@@ -363,6 +392,8 @@ module Discourse
 
   def self.clear_readonly!
     last_read_only[$redis.namespace] = nil
+    Site.clear_anon_cache!
+    true
   end
 
   def self.request_refresh!(user_ids: nil)
@@ -412,6 +443,16 @@ module Discourse
       end
   end
 
+  def self.last_commit_date
+    ensure_version_file_loaded
+    $last_commit_date ||=
+      begin
+        git_cmd = 'git log -1 --format="%ct"'
+        seconds = self.try_git(git_cmd, nil)
+        seconds.nil? ? nil : DateTime.strptime(seconds, '%s')
+      end
+  end
+
   def self.try_git(git_cmd, default_value)
     version_value = false
 
@@ -448,6 +489,10 @@ module Discourse
       @local_store_loaded ||= require 'file_store/local_store'
       FileStore::LocalStore.new
     end
+  end
+
+  def self.stats
+    PluginStore.new("stats")
   end
 
   def self.current_user_provider
@@ -597,10 +642,23 @@ module Discourse
     end
   end
 
-  def self.deprecate(warning)
-    location = caller_locations[1]
-    warning = "Deprecation Notice: #{warning}\nAt: #{location.label} #{location.path}:#{location.lineno}"
+  def self.deprecate(warning, drop_from: nil, since: nil, raise_error: false, output_in_test: false)
+    location = caller_locations[1].yield_self { |l| "#{l.path}:#{l.lineno}:in \`#{l.label}\`" }
+    warning = ["Deprecation notice:", warning]
+    warning << "(deprecated since Discourse #{since})" if since
+    warning << "(removal in Discourse #{drop_from})" if drop_from
+    warning << "\nAt #{location}"
+    warning = warning.join(" ")
+
+    if raise_error
+      raise Deprecation.new(warning)
+    end
+
     if Rails.env == "development"
+      STDERR.puts(warning)
+    end
+
+    if output_in_test && Rails.env == "test"
       STDERR.puts(warning)
     end
 

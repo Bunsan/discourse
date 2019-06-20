@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'mail'
 require_dependency 'email/message_builder'
 require_dependency 'email/renderer'
@@ -35,6 +37,10 @@ module Email
     end
 
     [text&.decoded, html&.decoded]
+  end
+
+  def self.site_title
+    SiteSetting.email_site_title.presence || SiteSetting.title
   end
 
 end

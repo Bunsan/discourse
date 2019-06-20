@@ -1,60 +1,69 @@
 import debounce from "discourse/lib/debounce";
 import { searchForTerm } from "discourse/lib/search";
+import { observes } from "ember-addons/ember-computed-decorators";
 
 export default Ember.Component.extend({
   loading: null,
   noResults: null,
   topics: null,
+  selectedTopicId: null,
+  currentTopicId: null,
+  topicTitle: null,
 
-  topicTitleChanged: function() {
+  @observes("topicTitle")
+  topicTitleChanged() {
     this.setProperties({
       loading: true,
       noResults: true,
       selectedTopicId: null
     });
-    this.search(this.get("topicTitle"));
-  }.observes("topicTitle"),
 
-  topicsChanged: function() {
-    const topics = this.get("topics");
-    if (topics) {
-      this.set("noResults", topics.length === 0);
+    this.search(this.topicTitle);
+  },
+
+  @observes("topics")
+  topicsChanged() {
+    if (this.topics) {
+      this.set("noResults", this.topics.length === 0);
     }
+
     this.set("loading", false);
-  }.observes("topics"),
+  },
 
   search: debounce(function(title) {
-    const self = this,
-      currentTopicId = this.get("currentTopicId");
-
-    if (Em.isEmpty(title)) {
-      self.setProperties({ topics: null, loading: false });
+    if (!this.element || this.isDestroying || this.isDestroyed) {
       return;
     }
 
-    searchForTerm(title, { typeFilter: "topic", searchForId: true }).then(
-      function(results) {
-        if (results && results.posts && results.posts.length > 0) {
-          self.set(
-            "topics",
-            results.posts
-              .mapBy("topic")
-              .filter(t => t.get("id") !== currentTopicId)
-          );
-        } else {
-          self.setProperties({ topics: null, loading: false });
-        }
+    const currentTopicId = this.currentTopicId;
+
+    if (Ember.isEmpty(title)) {
+      this.setProperties({ topics: null, loading: false });
+      return;
+    }
+
+    searchForTerm(title, {
+      typeFilter: "topic",
+      searchForId: true,
+      restrictToArchetype: "regular"
+    }).then(results => {
+      if (results && results.posts && results.posts.length > 0) {
+        this.set(
+          "topics",
+          results.posts.mapBy("topic").filter(t => t.id !== currentTopicId)
+        );
+      } else {
+        this.setProperties({ topics: null, loading: false });
       }
-    );
+    });
   }, 300),
 
   actions: {
     chooseTopic(topic) {
-      const topicId = Em.get(topic, "id");
-      this.set("selectedTopicId", topicId);
-      Ember.run.next(() =>
-        $("#choose-topic-" + topicId).prop("checked", "true")
-      );
+      this.set("selectedTopicId", topic.id);
+      Ember.run.next(() => {
+        document.getElementById(`choose-topic-${topic.id}`).checked = true;
+      });
       return false;
     }
   }

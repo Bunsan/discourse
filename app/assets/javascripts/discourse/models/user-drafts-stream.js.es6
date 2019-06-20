@@ -14,7 +14,7 @@ export default RestModel.extend({
   loaded: false,
 
   init() {
-    this._super();
+    this._super(...arguments);
     this.setProperties({
       itemsLoaded: 0,
       content: [],
@@ -44,21 +44,21 @@ export default RestModel.extend({
   },
 
   remove(draft) {
-    let content = this.get("content").filter(
-      item => item.sequence !== draft.sequence
+    let content = this.content.filter(
+      item => item.draft_key !== draft.draft_key
     );
     this.setProperties({ content, itemsLoaded: content.length });
   },
 
   findItems() {
-    let findUrl = this.get("baseUrl");
+    let findUrl = this.baseUrl;
 
-    const lastLoadedUrl = this.get("lastLoadedUrl");
+    const lastLoadedUrl = this.lastLoadedUrl;
     if (lastLoadedUrl === findUrl) {
       return Ember.RSVP.resolve();
     }
 
-    if (this.get("loading")) {
+    if (this.loading) {
       return Ember.RSVP.resolve();
     }
 
@@ -70,7 +70,7 @@ export default RestModel.extend({
           this.set("noContentHelp", result.no_results_help);
         }
         if (result && result.drafts) {
-          const copy = Em.A();
+          const copy = Ember.A();
           result.drafts.forEach(draft => {
             let draftData = JSON.parse(draft.data);
             draft.post_number = draftData.postId || null;
@@ -90,10 +90,10 @@ export default RestModel.extend({
 
             copy.pushObject(UserDraft.create(draft));
           });
-          this.get("content").pushObjects(copy);
+          this.content.pushObjects(copy);
           this.setProperties({
             loaded: true,
-            itemsLoaded: this.get("itemsLoaded") + result.drafts.length
+            itemsLoaded: this.itemsLoaded + result.drafts.length
           });
         }
       })

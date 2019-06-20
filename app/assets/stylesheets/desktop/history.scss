@@ -2,7 +2,7 @@
 
 .modal.history-modal {
   .modal-inner-container {
-    max-width: 960px;
+    max-width: $large-width;
   }
   .modal-body {
     height: 70vh;
@@ -20,15 +20,6 @@
     text-align: right;
     display: inline-block;
     float: right;
-
-    .btn {
-      background-color: inherit;
-      color: blend-primary-secondary(50%);
-    }
-    .btn-primary {
-      color: $primary;
-      font-weight: bold;
-    }
   }
 
   #revisions {

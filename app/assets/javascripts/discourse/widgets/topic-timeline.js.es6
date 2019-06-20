@@ -216,11 +216,6 @@ createWidget("timeline-scrollarea", {
       );
       showButton =
         before + SCROLLER_HEIGHT - 5 < lastReadTop || before > lastReadTop + 25;
-
-      // Don't show if at the bottom of the timeline
-      if (lastReadTop > scrollareaHeight() - LAST_READ_HEIGHT / 2) {
-        showButton = false;
-      }
     }
 
     const result = [
@@ -337,7 +332,7 @@ createWidget("timeline-footer-controls", {
       if (topic.get("details.can_create_post")) {
         controls.push(
           this.attach("button", {
-            className: "create",
+            className: "btn-default create",
             icon: "reply",
             title: "topic.reply.help",
             action: "replyToPost"
@@ -395,7 +390,7 @@ export default createWidget("topic-timeline", {
     const stream = this.attrs.topic.get("postStream");
 
     // a little debounce to avoid flashing
-    setTimeout(() => {
+    Ember.run.later(() => {
       if (!this.state.position === pos) {
         return;
       }

@@ -34,9 +34,37 @@ componentTest("adding a value", {
     );
 
     assert.deepEqual(
-      this.get("values"),
+      this.values,
       "firstKey|FirstValue\nsecondKey|secondValue\nthirdKey|thirdValue",
       "it adds the value to the list of values"
+    );
+  }
+});
+
+componentTest("adding an invalid value", {
+  template: "{{secret-value-list values=values}}",
+
+  async test(assert) {
+    await fillIn(".new-value-input.key", "someString");
+    await fillIn(".new-value-input.secret", "keyWithAPipe|Hidden");
+    await click(".add-value-btn");
+
+    assert.ok(
+      find(".values .value").length === 0,
+      "it doesn't add the value to the list of values"
+    );
+
+    assert.deepEqual(
+      this.values,
+      undefined,
+      "it doesn't add the value to the list of values"
+    );
+
+    assert.ok(
+      find(".validation-error")
+        .html()
+        .indexOf(I18n.t("admin.site_settings.secret_list.invalid_input")) > -1,
+      "it shows validation error"
     );
   }
 });
@@ -55,7 +83,7 @@ componentTest("removing a value", {
     );
 
     assert.equal(
-      this.get("values"),
+      this.values,
       "secondKey|secondValue",
       "it removes the expected value"
     );

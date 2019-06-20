@@ -1,5 +1,7 @@
+# frozen_string_literal: true
+
 class Auth::Result
-  attr_accessor :user, :name, :username, :email, :user,
+  attr_accessor :user, :name, :username, :email,
                 :email_valid, :extra_data, :awaiting_activation,
                 :awaiting_approval, :authenticated, :authenticator_name,
                 :requires_invite, :not_allowed_from_ip_address,
@@ -64,15 +66,14 @@ class Auth::Result
     else
       result = { email: email,
                  username: UserNameSuggester.suggest(username || name || email),
-                 # this feels a tad wrong
-                 auth_provider: authenticator_name.capitalize,
+                 auth_provider: authenticator_name,
                  email_valid: !!email_valid,
                  omit_username: !!omit_username }
 
       result[:destination_url] = destination_url if destination_url.present?
 
       if SiteSetting.enable_names?
-        result[:name] = User.suggest_name(name || username || email)
+        result[:name] = name.presence || User.suggest_name(username || email)
       end
 
       result

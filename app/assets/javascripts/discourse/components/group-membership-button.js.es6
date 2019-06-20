@@ -15,13 +15,18 @@ export default Ember.Component.extend({
     return publicExit && userIsGroupUser;
   },
 
+  @computed("model.allow_membership_requests", "userIsGroupUser")
+  canRequestMembership(allowMembershipRequests, userIsGroupUser) {
+    return allowMembershipRequests && !userIsGroupUser;
+  },
+
   @computed("model.is_group_user")
   userIsGroupUser(isGroupUser) {
     return !!isGroupUser;
   },
 
   _showLoginModal() {
-    this.sendAction("showLogin");
+    this.showLogin();
     $.cookie("destination_url", window.location.href);
   },
 
@@ -29,7 +34,7 @@ export default Ember.Component.extend({
     joinGroup() {
       if (this.currentUser) {
         this.set("updatingMembership", true);
-        const model = this.get("model");
+        const model = this.model;
 
         model
           .addMembers(this.currentUser.get("username"))
@@ -47,7 +52,7 @@ export default Ember.Component.extend({
 
     leaveGroup() {
       this.set("updatingMembership", true);
-      const model = this.get("model");
+      const model = this.model;
 
       model
         .removeMember(this.currentUser)
@@ -63,7 +68,7 @@ export default Ember.Component.extend({
     showRequestMembershipForm() {
       if (this.currentUser) {
         showModal("request-group-membership-form", {
-          model: this.get("model")
+          model: this.model
         });
       } else {
         this._showLoginModal();

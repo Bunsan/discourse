@@ -1,3 +1,5 @@
+import computed from "ember-addons/ember-computed-decorators";
+
 export default Ember.ArrayProxy.extend({
   loading: false,
   loadingMore: false,
@@ -10,48 +12,44 @@ export default Ember.ArrayProxy.extend({
   findArgs: null,
   store: null,
   __type: null,
+  resultSetMeta: null,
 
-  canLoadMore: function() {
-    return this.get("length") < this.get("totalRows");
-  }.property("totalRows", "length"),
+  @computed("totalRows", "length")
+  canLoadMore(totalRows, length) {
+    return length < totalRows;
+  },
 
   loadMore() {
-    const loadMoreUrl = this.get("loadMoreUrl");
+    const loadMoreUrl = this.loadMoreUrl;
     if (!loadMoreUrl) {
       return;
     }
 
-    const totalRows = this.get("totalRows");
-    if (this.get("length") < totalRows && !this.get("loadingMore")) {
+    const totalRows = this.totalRows;
+    if (this.length < totalRows && !this.loadingMore) {
       this.set("loadingMore", true);
 
-      const self = this;
       return this.store
-        .appendResults(this, this.get("__type"), loadMoreUrl)
-        .finally(function() {
-          self.set("loadingMore", false);
-        });
+        .appendResults(this, this.__type, loadMoreUrl)
+        .finally(() => this.set("loadingMore", false));
     }
 
     return Ember.RSVP.resolve();
   },
 
   refresh() {
-    if (this.get("refreshing")) {
+    if (this.refreshing) {
       return;
     }
 
-    const refreshUrl = this.get("refreshUrl");
+    const refreshUrl = this.refreshUrl;
     if (!refreshUrl) {
       return;
     }
 
-    const self = this;
     this.set("refreshing", true);
     return this.store
-      .refreshResults(this, this.get("__type"), refreshUrl)
-      .finally(function() {
-        self.set("refreshing", false);
-      });
+      .refreshResults(this, this.__type, refreshUrl)
+      .finally(() => this.set("refreshing", false));
   }
 });

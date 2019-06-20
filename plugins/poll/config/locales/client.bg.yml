@@ -15,8 +15,6 @@ bg:
         one: "общ брой гласове"
         other: "общо гласове"
       average_rating: "Средна отценка: <strong>%{average}</strong>."
-      public:
-        title: "Гласуването е публично."
       multiple:
         help:
           at_least_min_options:
@@ -45,6 +43,8 @@ bg:
       ui_builder:
         poll_type:
           label: Тип
+        poll_result:
+          label: Резултати
         poll_config:
           max: Максимално
           min: Минимално

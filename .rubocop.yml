@@ -7,9 +7,13 @@ AllCops:
     - 'vendor/**/*'
     - 'node_modules/**/*'
     - 'public/**/*'
+    - 'plugins/**/*'
 
 # Prefer &&/|| over and/or.
 Style/AndOr:
+  Enabled: true
+
+Style/FrozenStringLiteralComment:
   Enabled: true
 
 # Do not use braces for hash literals when they are the last argument of a
@@ -114,3 +118,10 @@ Layout/AlignHash:
 
 Bundler/OrderedGems:
   Enabled: false
+
+Style/SingleLineMethods:
+  Enabled: true
+
+Style/Semicolon:
+  Enabled: true
+  AllowAsExpressionSeparator: true

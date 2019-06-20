@@ -16,10 +16,8 @@ export default {
       if (!timeoutIsSet && Discourse.get("requiresRefresh")) {
         // Since we can do this transparently for people browsing the forum
         //  hold back the message 24 hours.
-        setTimeout(function() {
-          bootbox.confirm(I18n.lookup("assets_changed_confirm"), function(
-            result
-          ) {
+        Ember.run.later(() => {
+          bootbox.confirm(I18n.t("assets_changed_confirm"), function(result) {
             if (result) {
               document.location.reload();
             }

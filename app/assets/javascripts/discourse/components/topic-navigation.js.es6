@@ -1,6 +1,10 @@
 import { observes } from "ember-addons/ember-computed-decorators";
 import showModal from "discourse/lib/show-modal";
-import PanEvents from "discourse/mixins/pan-events";
+import PanEvents, {
+  SWIPE_VELOCITY,
+  SWIPE_DISTANCE_THRESHOLD,
+  SWIPE_VELOCITY_THRESHOLD
+} from "discourse/mixins/pan-events";
 
 export default Ember.Component.extend(PanEvents, {
   composerOpen: null,
@@ -8,7 +12,7 @@ export default Ember.Component.extend(PanEvents, {
   isPanning: false,
 
   init() {
-    this._super();
+    this._super(...arguments);
     this.set("info", Ember.Object.create());
   },
 
@@ -17,7 +21,7 @@ export default Ember.Component.extend(PanEvents, {
       return;
     }
 
-    let info = this.get("info");
+    let info = this.info;
 
     if (info.get("topicProgressExpanded")) {
       info.setProperties({
@@ -31,7 +35,7 @@ export default Ember.Component.extend(PanEvents, {
         const width = $(window).width();
         let height = $(window).height();
 
-        if (this.get("composerOpen")) {
+        if (this.composerOpen) {
           height -= $("#reply-control").height();
         }
 
@@ -110,17 +114,20 @@ export default Ember.Component.extend(PanEvents, {
         modalClass: "jump-to-post-modal"
       });
       controller.setProperties({
-        topic: this.get("topic"),
+        topic: this.topic,
         jumpToIndex: this.attrs.jumpToIndex,
         jumpToDate: this.attrs.jumpToDate
       });
     }
   },
 
-  _panOpenClose(offset, velocity, direction) {
+  _handlePanDone(offset, event) {
     const $timelineContainer = $(".timeline-container");
-    const maxOffset = parseInt($timelineContainer.css("height"));
-    direction === "close" ? (offset += velocity) : (offset -= velocity);
+    const maxOffset = parseInt($timelineContainer.css("height"), 10);
+
+    this._shouldPanClose(event)
+      ? (offset += SWIPE_VELOCITY)
+      : (offset -= SWIPE_VELOCITY);
 
     $timelineContainer.css("bottom", -offset);
     if (offset > maxOffset) {
@@ -128,48 +135,48 @@ export default Ember.Component.extend(PanEvents, {
     } else if (offset <= 0) {
       $timelineContainer.css("bottom", "");
     } else {
-      Ember.run.later(
-        () => this._panOpenClose(offset, velocity, direction),
-        20
-      );
+      Ember.run.later(() => this._handlePanDone(offset, event), 20);
     }
   },
 
   _shouldPanClose(e) {
-    return (e.deltaY > 200 && e.velocityY > -0.15) || e.velocityY > 0.15;
+    return (
+      (e.deltaY > SWIPE_DISTANCE_THRESHOLD &&
+        e.velocityY > -SWIPE_VELOCITY_THRESHOLD) ||
+      e.velocityY > SWIPE_VELOCITY_THRESHOLD
+    );
   },
 
   panStart(e) {
+    e.originalEvent.preventDefault();
     const center = e.center;
     const $centeredElement = $(document.elementFromPoint(center.x, center.y));
     if ($centeredElement.parents(".timeline-scrollarea-wrapper").length) {
-      this.set("isPanning", false);
+      this.isPanning = false;
     } else if (e.direction === "up" || e.direction === "down") {
-      this.set("isPanning", true);
+      this.isPanning = true;
     }
   },
 
   panEnd(e) {
-    if (!this.get("isPanning")) {
+    if (!this.isPanning) {
       return;
     }
-    this.set("isPanning", false);
-    if (this._shouldPanClose(e)) {
-      this._panOpenClose(e.deltaY, 40, "close");
-    } else {
-      this._panOpenClose(e.deltaY, 40, "open");
-    }
+    e.originalEvent.preventDefault();
+    this.isPanning = false;
+    this._handlePanDone(e.deltaY, e);
   },
 
   panMove(e) {
-    if (!this.get("isPanning")) {
+    if (!this.isPanning) {
       return;
     }
+    e.originalEvent.preventDefault();
     $(".timeline-container").css("bottom", Math.min(0, -e.deltaY));
   },
 
   didInsertElement() {
-    this._super();
+    this._super(...arguments);
 
     this.appEvents
       .on("topic:current-post-scrolled", this, this._topicScrolled)
@@ -191,7 +198,7 @@ export default Ember.Component.extend(PanEvents, {
   },
 
   willDestroyElement() {
-    this._super();
+    this._super(...arguments);
 
     this.appEvents
       .off("topic:current-post-scrolled", this, this._topicScrolled)

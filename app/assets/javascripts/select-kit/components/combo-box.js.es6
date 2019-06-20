@@ -15,8 +15,8 @@ export default SingleSelectComponent.extend({
   clearable: false,
 
   computeHeaderContent() {
-    let content = this._super();
-    content.hasSelection = this.get("hasSelection");
+    let content = this._super(...arguments);
+    content.hasSelection = this.hasSelection;
     return content;
   },
 
@@ -25,10 +25,10 @@ export default SingleSelectComponent.extend({
     return isExpanded ? caretUpIcon : caretDownIcon;
   },
 
-  @on("didReceiveAttrs")
+  @on("didUpdateAttrs", "init")
   _setComboBoxOptions() {
-    this.get("headerComponentOptions").setProperties({
-      clearable: this.get("clearable")
+    this.headerComponentOptions.setProperties({
+      clearable: this.clearable
     });
   }
 });

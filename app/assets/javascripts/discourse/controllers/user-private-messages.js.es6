@@ -7,21 +7,21 @@ export default Ember.Controller.extend({
   user: Ember.inject.controller(),
 
   pmView: false,
-  viewingSelf: Em.computed.alias("user.viewingSelf"),
-  isGroup: Em.computed.equal("pmView", "groups"),
-  currentPath: Em.computed.alias("application.currentPath"),
-  selected: Em.computed.alias("userTopicsList.selected"),
-  bulkSelectEnabled: Em.computed.alias("userTopicsList.bulkSelectEnabled"),
+  viewingSelf: Ember.computed.alias("user.viewingSelf"),
+  isGroup: Ember.computed.equal("pmView", "groups"),
+  currentPath: Ember.computed.alias("application.currentPath"),
+  selected: Ember.computed.alias("userTopicsList.selected"),
+  bulkSelectEnabled: Ember.computed.alias("userTopicsList.bulkSelectEnabled"),
   showToggleBulkSelect: true,
   pmTaggingEnabled: Ember.computed.alias("site.can_tag_pms"),
   tagId: null,
 
-  showNewPM: function() {
+  @computed("user.viewingSelf")
+  showNewPM(viewingSelf) {
     return (
-      this.get("user.viewingSelf") &&
-      Discourse.User.currentProp("can_send_private_messages")
+      viewingSelf && Discourse.User.currentProp("can_send_private_messages")
     );
-  }.property("user.viewingSelf"),
+  },
 
   @computed("selected.[]", "bulkSelectEnabled")
   hasSelection(selected, bulkSelectEnabled) {
@@ -39,10 +39,10 @@ export default Ember.Controller.extend({
   },
 
   bulkOperation(operation) {
-    const selected = this.get("selected");
+    const selected = this.selected;
     var params = { type: operation };
-    if (this.get("isGroup")) {
-      params.group = this.get("groupFilter");
+    if (this.isGroup) {
+      params.group = this.groupFilter;
     }
 
     Topic.bulkOperation(selected, params).then(

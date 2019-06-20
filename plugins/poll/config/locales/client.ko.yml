@@ -13,8 +13,6 @@ ko:
       total_votes:
         other: "전체 투표"
       average_rating: "평균: <strong>%{average}</strong>."
-      public:
-        title: "투표는 공개됩니다."
       multiple:
         help:
           at_least_min_options:
@@ -55,6 +53,8 @@ ko:
           regular: 단일 선택
           multiple: 복수 선택
           number: 점수 매기기
+        poll_result:
+          label: 검색 결과
         poll_config:
           max: 최대
           min: 최소

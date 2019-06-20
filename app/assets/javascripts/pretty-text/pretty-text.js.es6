@@ -26,13 +26,11 @@ export function buildOptions(state) {
     lookupPrimaryUserGroupByPostNumber,
     formatUsername,
     emojiUnicodeReplacer,
-    lookupInlineOnebox,
-    lookupImageUrls,
+    lookupUploadUrls,
     previewing,
     linkify,
     censoredWords,
-    mentionLookup,
-    invalidateOneboxes
+    disableEmojis
   } = state;
 
   let features = {
@@ -67,10 +65,8 @@ export function buildOptions(state) {
     lookupAvatarByPostNumber,
     lookupPrimaryUserGroupByPostNumber,
     formatUsername,
-    mentionLookup,
     emojiUnicodeReplacer,
-    lookupInlineOnebox,
-    lookupImageUrls,
+    lookupUploadUrls,
     censoredWords,
     allowedHrefSchemes: siteSettings.allowed_href_schemes
       ? siteSettings.allowed_href_schemes.split("|")
@@ -82,7 +78,7 @@ export function buildOptions(state) {
     injectLineNumbersToPreview:
       siteSettings.enable_advanced_editor_preview_sync,
     previewing,
-    invalidateOneboxes
+    disableEmojis
   };
 
   // note, this will mutate options due to the way the API is designed

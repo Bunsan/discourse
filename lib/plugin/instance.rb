@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'digest/sha1'
 require 'fileutils'
 require_dependency 'plugin/metadata'
@@ -16,6 +18,15 @@ class Plugin::CustomEmoji
     @@cache_key = Digest::SHA1.hexdigest(cache_key + name)[0..10]
     emojis[name] = url
   end
+
+  def self.translations
+    @@translations ||= {}
+  end
+
+  def self.translate(from, to)
+    @@cache_key = Digest::SHA1.hexdigest(cache_key + from)[0..10]
+    translations[from] = to
+  end
 end
 
 class Plugin::Instance
@@ -25,14 +36,16 @@ class Plugin::Instance
 
   # Memoized array readers
   [:assets,
-   :auth_providers,
    :color_schemes,
+   :before_auth_initializers,
    :initializers,
    :javascripts,
    :locales,
    :service_workers,
    :styles,
-   :themes].each do |att|
+   :themes,
+   :csp_extensions,
+ ].each do |att|
     class_eval %Q{
       def #{att}
         @#{att} ||= []
@@ -70,7 +83,7 @@ class Plugin::Instance
   end
 
   def enabled?
-    @enabled_site_setting ? SiteSetting.send(@enabled_site_setting) : true
+    @enabled_site_setting ? SiteSetting.get(@enabled_site_setting) : true
   end
 
   delegate :name, to: :metadata
@@ -84,11 +97,11 @@ class Plugin::Instance
 
         if define_include_method
           # Don't include serialized methods if the plugin is disabled
-          klass.send(:define_method, "include_#{attr}?") { plugin.enabled? }
+          klass.public_send(:define_method, "include_#{attr}?") { plugin.enabled? }
         end
       end
 
-      klass.send(:define_method, attr, &block)
+      klass.public_send(:define_method, attr, &block)
     end
   end
 
@@ -133,6 +146,12 @@ class Plugin::Instance
     end
   end
 
+  def register_editable_group_custom_field(field)
+    reloadable_patch do |plugin|
+      ::Group.register_plugin_editable_group_custom_field(field, plugin) # plugin.enabled? is checked at runtime
+    end
+  end
+
   def custom_avatar_column(column)
     reloadable_patch do |plugin|
       AvatarLookup.lookup_columns << column
@@ -159,10 +178,10 @@ class Plugin::Instance
     reloadable_patch do |plugin|
       klass = class_name.to_s.classify.constantize rescue class_name.to_s.constantize
       hidden_method_name = :"#{attr}_without_enable_check"
-      klass.send(:define_method, hidden_method_name, &block)
+      klass.public_send(:define_method, hidden_method_name, &block)
 
-      klass.send(:define_method, attr) do |*args|
-        send(hidden_method_name, *args) if plugin.enabled?
+      klass.public_send(:define_method, attr) do |*args|
+        public_send(hidden_method_name, *args) if plugin.enabled?
       end
     end
   end
@@ -173,10 +192,10 @@ class Plugin::Instance
       klass = klass_name.to_s.classify.constantize rescue klass_name.to_s.constantize
 
       hidden_method_name = :"#{attr}_without_enable_check"
-      klass.send(:define_singleton_method, hidden_method_name, &block)
+      klass.public_send(:define_singleton_method, hidden_method_name, &block)
 
-      klass.send(:define_singleton_method, attr) do |*args|
-        send(hidden_method_name, *args) if plugin.enabled?
+      klass.public_send(:define_singleton_method, attr) do |*args|
+        public_send(hidden_method_name, *args) if plugin.enabled?
       end
     end
   end
@@ -189,10 +208,10 @@ class Plugin::Instance
       method_name = "#{plugin.name}_#{klass.name}_#{callback}#{@idx}".underscore
       @idx += 1
       hidden_method_name = :"#{method_name}_without_enable_check"
-      klass.send(:define_method, hidden_method_name, &block)
+      klass.public_send(:define_method, hidden_method_name, &block)
 
-      klass.send(callback, options) do |*args|
-        send(hidden_method_name, *args) if plugin.enabled?
+      klass.public_send(callback, options) do |*args|
+        public_send(hidden_method_name, *args) if plugin.enabled?
       end
 
       hidden_method_name
@@ -232,7 +251,7 @@ class Plugin::Instance
   # Add validation method but check that the plugin is enabled
   def validate(klass, name, &block)
     klass = klass.to_s.classify.constantize
-    klass.send(:define_method, name, &block)
+    klass.public_send(:define_method, name, &block)
 
     plugin = self
     klass.validate(name, if: -> { plugin.enabled? })
@@ -285,6 +304,11 @@ class Plugin::Instance
     initializers << block
   end
 
+  def before_auth(&block)
+    raise "Auth providers must be registered before omniauth middleware. after_initialize is too late!" if @before_auth_complete
+    before_auth_initializers << block
+  end
+
   # A proxy to `DiscourseEvent.on` which does nothing if the plugin is disabled
   def on(event_name, &block)
     DiscourseEvent.on(event_name) do |*args|
@@ -309,6 +333,13 @@ class Plugin::Instance
         raise e unless e.message.try(:include?, "PG::UndefinedTable")
       end
     end
+  end
+
+  def notify_before_auth
+    before_auth_initializers.each do |callback|
+      callback.call(self)
+    end
+    @before_auth_complete = true
   end
 
   # Applies to all sites in a multisite environment. Ignores plugin.enabled?
@@ -355,6 +386,14 @@ class Plugin::Instance
 
   def register_javascript(js)
     javascripts << js
+  end
+
+  def register_svg_icon(icon)
+    DiscoursePluginRegistry.register_svg_icon(icon)
+  end
+
+  def extend_content_security_policy(extension)
+    csp_extensions << extension
   end
 
   # @option opts [String] :name
@@ -407,6 +446,10 @@ class Plugin::Instance
     Plugin::CustomEmoji.register(name, url)
   end
 
+  def translate_emoji(from, to)
+    Plugin::CustomEmoji.translate(from, to)
+  end
+
   def automatic_assets
     css = styles.join("\n")
     js = javascripts.join("\n")
@@ -448,7 +491,6 @@ class Plugin::Instance
     register_assets! unless assets.blank?
     register_locales!
     register_service_workers!
-    register_auth_providers!
 
     seed_data.each do |key, value|
       DiscoursePluginRegistry.register_seed_data(key, value)
@@ -486,26 +528,26 @@ class Plugin::Instance
   end
 
   def auth_provider(opts)
-    provider = Auth::AuthProvider.new
+    before_auth do
+      provider = Auth::AuthProvider.new
 
-    Auth::AuthProvider.auth_attributes.each do |sym|
-      provider.send "#{sym}=", opts.delete(sym)
-    end
+      Auth::AuthProvider.auth_attributes.each do |sym|
+        provider.public_send("#{sym}=", opts.delete(sym)) if opts.has_key?(sym)
+      end
 
-    after_initialize do
       begin
         provider.authenticator.enabled?
       rescue NotImplementedError
         provider.authenticator.define_singleton_method(:enabled?) do
-          Rails.logger.warn("#{provider.authenticator.class.name} should define an `enabled?` function. Patching for now.")
-          return SiteSetting.send(provider.enabled_setting) if provider.enabled_setting
-          Rails.logger.warn("#{provider.authenticator.class.name} has not defined an enabled_setting. Defaulting to true.")
+          Discourse.deprecate("#{provider.authenticator.class.name} should define an `enabled?` function. Patching for now.")
+          return SiteSetting.get(provider.enabled_setting) if provider.enabled_setting
+          Discourse.deprecate("#{provider.authenticator.class.name} has not defined an enabled_setting. Defaulting to true.")
           true
         end
       end
-    end
 
-    auth_providers << provider
+      DiscoursePluginRegistry.register_auth_provider(provider)
+    end
   end
 
   # shotgun approach to gem loading, in future we need to hack bundler
@@ -570,6 +612,19 @@ class Plugin::Instance
     end
   end
 
+  def register_reviewable_type(reviewable_type_class)
+    extend_list_method Reviewable, :types, [reviewable_type_class.name]
+  end
+
+  def extend_list_method(klass, method, new_attributes)
+    current_list = klass.public_send(method)
+    current_list.concat(new_attributes)
+
+    reloadable_patch do
+      klass.public_send(:define_singleton_method, method) { current_list }
+    end
+  end
+
   protected
 
   def register_assets!
@@ -581,12 +636,6 @@ class Plugin::Instance
   def register_service_workers!
     service_workers.each do |asset, opts|
       DiscoursePluginRegistry.register_service_worker(asset, opts)
-    end
-  end
-
-  def register_auth_providers!
-    auth_providers.each do |auth_provider|
-      DiscoursePluginRegistry.register_auth_provider(auth_provider)
     end
   end
 
@@ -604,11 +653,15 @@ class Plugin::Instance
 
       path = File.join(lib_locale_path, "message_format")
       opts[:message_format] = find_locale_file(locale_chain, path)
-      opts[:message_format] = JsLocaleHelper.find_message_format_locale(locale_chain, false) unless opts[:message_format]
+      opts[:message_format] = JsLocaleHelper.find_message_format_locale(locale_chain, fallback_to_english: false) unless opts[:message_format]
 
       path = File.join(lib_locale_path, "moment_js")
       opts[:moment_js] = find_locale_file(locale_chain, path)
       opts[:moment_js] = JsLocaleHelper.find_moment_locale(locale_chain) unless opts[:moment_js]
+
+      path = File.join(lib_locale_path, "moment_js_timezones")
+      opts[:moment_js_timezones] = find_locale_file(locale_chain, path)
+      opts[:moment_js_timezones] = JsLocaleHelper.find_moment_locale(locale_chain, timezone_names: true) unless opts[:moment_js_timezones]
 
       if valid_locale?(opts)
         DiscoursePluginRegistry.register_locale(locale, opts)

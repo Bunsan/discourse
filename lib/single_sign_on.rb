@@ -1,4 +1,8 @@
+# frozen_string_literal: true
+
 class SingleSignOn
+
+  class ParseError < RuntimeError; end
 
   ACCESSORS = %i{
     add_groups
@@ -35,7 +39,13 @@ class SingleSignOn
     suppress_welcome_message
   }
 
-  NONCE_EXPIRY_TIME = 10.minutes
+  def self.nonce_expiry_time
+    @nonce_expiry_time ||= 10.minutes
+  end
+
+  def self.nonce_expiry_time=(v)
+    @nonce_expiry_time = v
+  end
 
   attr_accessor(*ACCESSORS)
   attr_writer :sso_secret, :sso_url
@@ -50,25 +60,20 @@ class SingleSignOn
 
   def self.parse(payload, sso_secret = nil)
     sso = new
+    sso.sso_secret = sso_secret if sso_secret
 
     parsed = Rack::Utils.parse_query(payload)
     decoded = Base64.decode64(parsed["sso"])
     decoded_hash = Rack::Utils.parse_query(decoded)
 
-    return_sso_url = decoded_hash['return_sso_url']
-    sso.sso_secret = sso_secret || (provider_secret(return_sso_url) if return_sso_url)
-
     if sso.sign(parsed["sso"]) != parsed["sig"]
       diags = "\n\nsso: #{parsed["sso"]}\n\nsig: #{parsed["sig"]}\n\nexpected sig: #{sso.sign(parsed["sso"])}"
       if parsed["sso"] =~ /[^a-zA-Z0-9=\r\n\/+]/m
-        raise RuntimeError, "The SSO field should be Base64 encoded, using only A-Z, a-z, 0-9, +, /, and = characters. Your input contains characters we don't understand as Base64, see http://en.wikipedia.org/wiki/Base64 #{diags}"
+        raise ParseError, "The SSO field should be Base64 encoded, using only A-Z, a-z, 0-9, +, /, and = characters. Your input contains characters we don't understand as Base64, see http://en.wikipedia.org/wiki/Base64 #{diags}"
       else
-        raise RuntimeError, "Bad signature for payload #{diags}"
+        raise ParseError, "Bad signature for payload #{diags}"
       end
     end
-
-    decoded = Base64.decode64(parsed["sso"])
-    decoded_hash = Rack::Utils.parse_query(decoded)
 
     ACCESSORS.each do |k|
       val = decoded_hash[k.to_s]
@@ -76,7 +81,7 @@ class SingleSignOn
       if BOOLS.include? k
         val = ["true", "false"].include?(val) ? val == "true" : nil
       end
-      sso.send("#{k}=", val)
+      sso.public_send("#{k}=", val)
     end
 
     decoded_hash.each do |k, v|
@@ -88,21 +93,8 @@ class SingleSignOn
     sso
   end
 
-  def self.provider_secret(return_sso_url)
-    provider_secrets = SiteSetting.sso_provider_secrets.split(/[\|,\n]/)
-    provider_secrets_hash = Hash[*provider_secrets]
-    return_url_host = URI.parse(return_sso_url).host
-    # moves wildcard domains to the end of hash
-    sorted_secrets = provider_secrets_hash.sort_by { |k, _| k }.reverse.to_h
-
-    secret = sorted_secrets.select do |domain, _|
-      WildcardDomainChecker.check_domain(domain, return_url_host)
-    end
-    secret.present? ? secret.values.first : nil
-  end
-
   def diagnostics
-    SingleSignOn::ACCESSORS.map { |a| "#{a}: #{send(a)}" }.join("\n")
+    SingleSignOn::ACCESSORS.map { |a| "#{a}: #{public_send(a)}" }.join("\n")
   end
 
   def sso_secret
@@ -117,8 +109,8 @@ class SingleSignOn
     @custom_fields ||= {}
   end
 
-  def sign(payload, provider_secret = nil)
-    secret = provider_secret || sso_secret
+  def sign(payload, secret = nil)
+    secret = secret || sso_secret
     OpenSSL::HMAC.hexdigest("sha256", secret, payload)
   end
 
@@ -127,17 +119,17 @@ class SingleSignOn
     "#{base}#{base.include?('?') ? '&' : '?'}#{payload}"
   end
 
-  def payload(provider_secret = nil)
+  def payload(secret = nil)
     payload = Base64.strict_encode64(unsigned_payload)
-    "sso=#{CGI::escape(payload)}&sig=#{sign(payload, provider_secret)}"
+    "sso=#{CGI::escape(payload)}&sig=#{sign(payload, secret)}"
   end
 
   def unsigned_payload
     payload = {}
 
     ACCESSORS.each do |k|
-      next if (val = send k) == nil
-     payload[k] = val
+      next if (val = public_send(k)) == nil
+      payload[k] = val
     end
 
     @custom_fields&.each do |k, v|

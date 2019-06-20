@@ -10,9 +10,18 @@ export default Discourse.Route.extend({
   },
 
   afterModel(siteSettings) {
-    this.controllerFor("adminSiteSettings").set(
-      "allSiteSettings",
-      siteSettings
-    );
+    const controller = this.controllerFor("adminSiteSettings");
+
+    if (!controller.get("visibleSiteSettings")) {
+      controller.set("visibleSiteSettings", siteSettings);
+    }
+  },
+
+  actions: {
+    refreshAll() {
+      SiteSetting.findAll().then(settings => {
+        this.controllerFor("adminSiteSettings").set("model", settings);
+      });
+    }
   }
 });

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe TagsController do
@@ -64,10 +66,22 @@ describe TagsController do
       get "/tags/%2ftest%2f"
       expect(response.status).to eq(404)
     end
+
+    it "does not show staff-only tags" do
+      tag_group = Fabricate(:tag_group, permissions: { "staff" => 1 }, tag_names: ["test"])
+
+      get "/tags/test"
+      expect(response.status).to eq(404)
+
+      sign_in(Fabricate(:admin))
+
+      get "/tags/test"
+      expect(response.status).to eq(200)
+    end
   end
 
   describe '#check_hashtag' do
-    let(:tag) { Fabricate(:tag, name: 'test') }
+    fab!(:tag) { Fabricate(:tag, name: 'test') }
 
     it "should return the right response" do
       get "/tags/check.json", params: { tag_values: [tag.name] }
@@ -80,8 +94,8 @@ describe TagsController do
   end
 
   describe "#update" do
-    let(:tag) { Fabricate(:tag) }
-    let(:admin) { Fabricate(:admin) }
+    fab!(:tag) { Fabricate(:tag) }
+    fab!(:admin) { Fabricate(:admin) }
 
     before do
       tag
@@ -103,9 +117,9 @@ describe TagsController do
   end
 
   describe '#personal_messages' do
-    let(:regular_user) { Fabricate(:trust_level_4) }
-    let(:moderator) { Fabricate(:moderator) }
-    let(:admin) { Fabricate(:admin) }
+    fab!(:regular_user) { Fabricate(:trust_level_4) }
+    fab!(:moderator) { Fabricate(:moderator) }
+    fab!(:admin) { Fabricate(:admin) }
     let(:personal_message) do
       Fabricate(:private_message_topic, user: regular_user, topic_allowed_users: [
         Fabricate.build(:topic_allowed_user, user: regular_user),
@@ -174,13 +188,13 @@ describe TagsController do
   end
 
   describe '#show_latest' do
-    let(:tag)         { Fabricate(:tag) }
-    let(:other_tag)   { Fabricate(:tag) }
-    let(:third_tag)   { Fabricate(:tag) }
-    let(:category)    { Fabricate(:category) }
-    let(:subcategory) { Fabricate(:category, parent_category_id: category.id) }
+    fab!(:tag)       { Fabricate(:tag) }
+    fab!(:other_tag) { Fabricate(:tag) }
+    fab!(:third_tag) { Fabricate(:tag) }
+    fab!(:category)  { Fabricate(:category) }
+    fab!(:subcategory) { Fabricate(:category, parent_category_id: category.id) }
 
-    let(:single_tag_topic) { Fabricate(:topic, tags: [tag]) }
+    fab!(:single_tag_topic) { Fabricate(:topic, tags: [tag]) }
     let(:multi_tag_topic)  { Fabricate(:topic, tags: [tag, other_tag]) }
     let(:all_tag_topic)    { Fabricate(:topic, tags: [tag, other_tag, third_tag]) }
 
@@ -319,14 +333,33 @@ describe TagsController do
         expect(json['results'].map { |j| j['id'] }).to eq(['tag', 'tag2'])
       end
 
-      it "can say if given tag is not allowed" do
-        yup, nope = Fabricate(:tag, name: 'yup'), Fabricate(:tag, name: 'nope')
-        category = Fabricate(:category, tags: [yup])
-        get "/tags/filter/search.json", params: { q: 'nope', categoryId: category.id }
-        expect(response.status).to eq(200)
-        json = ::JSON.parse(response.body)
-        expect(json["results"].map { |j| j["id"] }.sort).to eq([])
-        expect(json["forbidden"]).to be_present
+      context 'with category restriction' do
+        fab!(:yup) { Fabricate(:tag, name: 'yup') }
+        fab!(:category) { Fabricate(:category, tags: [yup]) }
+
+        it "can say if given tag is not allowed" do
+          nope = Fabricate(:tag, name: 'nope')
+          get "/tags/filter/search.json", params: { q: nope.name, categoryId: category.id }
+          expect(response.status).to eq(200)
+          json = ::JSON.parse(response.body)
+          expect(json["results"].map { |j| j["id"] }.sort).to eq([])
+          expect(json["forbidden"]).to be_present
+          expect(json["forbidden_message"]).to eq(I18n.t("tags.forbidden.in_this_category", tag_name: nope.name))
+        end
+
+        it "can say if given tag is restricted to different category" do
+          category
+          get "/tags/filter/search.json", params: { q: yup.name, categoryId: Fabricate(:category).id }
+          json = ::JSON.parse(response.body)
+          expect(json["results"].map { |j| j["id"] }.sort).to eq([])
+          expect(json["forbidden"]).to be_present
+          expect(json["forbidden_message"]).to eq(I18n.t(
+            "tags.forbidden.restricted_to",
+            count: 1,
+            tag_name: yup.name,
+            category_names: category.name
+          ))
+        end
       end
 
       it "matches tags after sanitizing input" do
@@ -386,6 +419,45 @@ describe TagsController do
           expect(json['error_type']).to eq('not_found')
         end
       end
+    end
+  end
+
+  describe '#unused' do
+    it "fails if you can't manage tags" do
+      sign_in(Fabricate(:user))
+      get "/tags/unused.json"
+      expect(response.status).to eq(403)
+      delete "/tags/unused.json"
+      expect(response.status).to eq(403)
+    end
+
+    context 'logged in' do
+      before do
+        sign_in(Fabricate(:admin))
+      end
+
+      context 'with some tags' do
+        let!(:tags) { [
+          Fabricate(:tag, name: "used_publically", topic_count: 2, pm_topic_count: 0),
+          Fabricate(:tag, name: "used_privately", topic_count: 0, pm_topic_count: 3),
+          Fabricate(:tag, name: "used_everywhere", topic_count: 0, pm_topic_count: 3),
+          Fabricate(:tag, name: "unused1", topic_count: 0, pm_topic_count: 0),
+          Fabricate(:tag, name: "unused2", topic_count: 0, pm_topic_count: 0)
+        ]}
+
+        it 'returns the correct unused tags' do
+          get "/tags/unused.json"
+          expect(response.status).to eq(200)
+          json = ::JSON.parse(response.body)
+          expect(json["tags"]).to contain_exactly("unused1", "unused2")
+        end
+
+        it 'deletes the correct tags' do
+          expect { delete "/tags/unused.json" }.to change { Tag.count }.by(-2) & change { UserHistory.count }.by(1)
+          expect(Tag.pluck(:name)).to contain_exactly("used_publically", "used_privately", "used_everywhere")
+        end
+      end
+
     end
   end
 

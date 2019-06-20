@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe TopicLink do
@@ -8,15 +10,15 @@ describe TopicLink do
     URI.parse(Discourse.base_url)
   end
 
-  let(:topic) do
+  fab!(:topic) do
     Fabricate(:topic, title: 'unique topic name')
   end
 
-  let(:user) do
+  fab!(:user) do
     topic.user
   end
 
-  let(:post) { Fabricate(:post) }
+  fab!(:post) { Fabricate(:post) }
 
   it "can't link to the same topic" do
     ftl = TopicLink.new(url: "/t/#{topic.id}",
@@ -26,15 +28,17 @@ describe TopicLink do
   end
 
   describe 'external links' do
-    before do
-      post = Fabricate(:post, raw: <<~RAW, user: user, topic: topic)
+    fab!(:post2) do
+      Fabricate(:post, raw: <<~RAW, user: user, topic: topic)
         http://a.com/
         https://b.com/b
         http://#{'a' * 200}.com/invalid
         //b.com/#{'a' * 500}
       RAW
+    end
 
-      TopicLink.extract_from(post)
+    before do
+      TopicLink.extract_from(post2)
     end
 
     it 'works' do
@@ -43,6 +47,16 @@ describe TopicLink do
         "https://b.com/b",
         "//b.com/#{'a' * 500}"[0...TopicLink.max_url_length]
       )
+    end
+
+    it "doesn't reset them when rebaking" do
+      old_ids = topic.topic_links.pluck(:id)
+
+      TopicLink.extract_from(post2)
+
+      new_ids = topic.topic_links.pluck(:id)
+
+      expect(new_ids).to contain_exactly(*old_ids)
     end
 
   end
@@ -72,7 +86,7 @@ describe TopicLink do
 
     context 'topic link' do
 
-      let(:other_topic) do
+      fab!(:other_topic) do
         Fabricate(:topic, user: user)
       end
 
@@ -368,7 +382,7 @@ describe TopicLink do
     end
 
     describe ".duplicate_lookup" do
-      let(:user) { Fabricate(:user, username: "junkrat") }
+      fab!(:user) { Fabricate(:user, username: "junkrat") }
 
       let(:post_with_internal_link) do
         Fabricate(:post, user: user, raw: "Check out this topic #{post.topic.url}/122131")

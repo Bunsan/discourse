@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe AboutController do
@@ -9,6 +11,7 @@ describe AboutController do
       get "/about"
 
       expect(response.status).to eq(200)
+      expect(response.body).to include("<title>About - Discourse</title>")
     end
 
     it 'should redirect to login page for anonymous user when login_required is true' do
@@ -24,6 +27,14 @@ describe AboutController do
       get "/about"
 
       expect(response.status).to eq(200)
+    end
+
+    context "crawler view" do
+      it "should include correct title" do
+        get '/about', headers: { 'HTTP_USER_AGENT' => 'Googlebot' }
+        expect(response.status).to eq(200)
+        expect(response.body).to include("<title>About - Discourse</title>")
+      end
     end
   end
 end

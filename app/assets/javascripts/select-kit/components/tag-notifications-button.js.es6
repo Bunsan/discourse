@@ -9,11 +9,11 @@ export default NotificationOptionsComponent.extend({
   allowInitialValueMutation: false,
 
   mutateValue(value) {
-    this.sendAction("action", value);
+    this.action(value);
   },
 
   computeValue() {
-    return this.get("notificationLevel");
+    return this.notificationLevel;
   },
 
   @computed("iconForSelectedDetails")

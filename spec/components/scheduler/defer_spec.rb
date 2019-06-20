@@ -1,4 +1,6 @@
 # encoding: utf-8
+# frozen_string_literal: true
+
 require 'rails_helper'
 require_dependency 'scheduler/defer'
 
@@ -54,7 +56,7 @@ describe Scheduler::Defer do
         sleep
       end
 
-      wait_for(100) do
+      wait_for(200) do
         messages.length == 1
       end
     end
@@ -83,7 +85,7 @@ describe Scheduler::Defer do
       x = 3
     end
 
-    wait_for(10) do
+    wait_for(1000) do
       x == 3
     end
 

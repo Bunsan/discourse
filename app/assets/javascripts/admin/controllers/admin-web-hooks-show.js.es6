@@ -9,6 +9,11 @@ export default Ember.Controller.extend({
   defaultEventTypes: Ember.computed.alias("adminWebHooks.defaultEventTypes"),
   contentTypes: Ember.computed.alias("adminWebHooks.contentTypes"),
 
+  @computed
+  showTagsFilter() {
+    return this.siteSettings.tagging_enabled;
+  },
+
   @computed("model.isSaving", "saved", "saveButtonDisabled")
   savingStatus(isSaving, saved, saveButtonDisabled) {
     if (isSaving) {
@@ -57,16 +62,29 @@ export default Ember.Controller.extend({
     }
   },
 
-  @computed("model.isSaving", "secretValidation", "eventTypeValidation")
-  saveButtonDisabled(isSaving, secretValidation, eventTypeValidation) {
-    return isSaving ? false : secretValidation || eventTypeValidation;
+  @computed(
+    "model.isSaving",
+    "secretValidation",
+    "eventTypeValidation",
+    "model.payload_url"
+  )
+  saveButtonDisabled(
+    isSaving,
+    secretValidation,
+    eventTypeValidation,
+    payloadUrl
+  ) {
+    return isSaving
+      ? false
+      : secretValidation || eventTypeValidation || Ember.isEmpty(payloadUrl);
   },
 
   actions: {
     save() {
       this.set("saved", false);
-      const url = extractDomainFromUrl(this.get("model.payload_url"));
-      const model = this.get("model");
+      const url = this.get("model.payload_url");
+      const domain = extractDomainFromUrl(url);
+      const model = this.model;
       const isNew = model.get("isNew");
 
       const saveWebHook = () => {
@@ -74,9 +92,7 @@ export default Ember.Controller.extend({
           .save()
           .then(() => {
             this.set("saved", true);
-            this.get("adminWebHooks")
-              .get("model")
-              .addObject(model);
+            this.adminWebHooks.get("model").addObject(model);
 
             if (isNew) {
               this.transitionToRoute("adminWebHooks.show", model.get("id"));
@@ -86,10 +102,10 @@ export default Ember.Controller.extend({
       };
 
       if (
-        url === "localhost" ||
-        url.match(/192\.168\.\d+\.\d+/) ||
-        url.match(/127\.\d+\.\d+\.\d+/) ||
-        url === Discourse.BaseUrl
+        domain === "localhost" ||
+        domain.match(/192\.168\.\d+\.\d+/) ||
+        domain.match(/127\.\d+\.\d+\.\d+/) ||
+        url.startsWith(Discourse.BaseUrl)
       ) {
         return bootbox.confirm(
           I18n.t("admin.web_hooks.warn_local_payload_url"),
@@ -113,13 +129,11 @@ export default Ember.Controller.extend({
         I18n.t("yes_value"),
         result => {
           if (result) {
-            const model = this.get("model");
+            const model = this.model;
             model
               .destroyRecord()
               .then(() => {
-                this.get("adminWebHooks")
-                  .get("model")
-                  .removeObject(model);
+                this.adminWebHooks.get("model").removeObject(model);
                 this.transitionToRoute("adminWebHooks");
               })
               .catch(popupAjaxError);

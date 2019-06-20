@@ -1,4 +1,6 @@
-if (Rails.env.production? && SiteSetting.logging_provider == 'lograge') || ENV["ENABLE_LOGRAGE"]
+# frozen_string_literal: true
+
+if (Rails.env.production? && SiteSetting.logging_provider == 'lograge') || (ENV["ENABLE_LOGRAGE"] == "1")
   require 'lograge'
 
   if Rails.configuration.multisite
@@ -22,7 +24,7 @@ if (Rails.env.production? && SiteSetting.logging_provider == 'lograge') || ENV["
             if controller.respond_to?(:current_user)
               controller.current_user&.username
             end
-          rescue Discourse::InvalidAccess
+          rescue Discourse::InvalidAccess, Discourse::ReadOnly
             nil
           end
 

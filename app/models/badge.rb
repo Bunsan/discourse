@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'slug'
 
 class Badge < ActiveRecord::Base
@@ -112,6 +114,10 @@ class Badge < ActiveRecord::Base
 
   before_create :ensure_not_system
 
+  after_commit do
+    SvgSprite.expire_cache
+  end
+
   # fields that can not be edited on system badges
   def self.protected_system_fields
     [
@@ -195,7 +201,7 @@ class Badge < ActiveRecord::Base
 
   def default_badge_grouping_id=(val)
     # allow to correct orphans
-    if !self.badge_grouping_id || self.badge_grouping_id < 0
+    if !self.badge_grouping_id || self.badge_grouping_id <= BadgeGrouping::Other
       self.badge_grouping_id = val
     end
   end

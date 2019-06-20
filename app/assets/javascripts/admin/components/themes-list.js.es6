@@ -7,16 +7,16 @@ export default Ember.Component.extend({
 
   classNames: ["themes-list"],
 
-  hasThemes: Em.computed.gt("themesList.length", 0),
-  hasUserThemes: Em.computed.gt("userThemes.length", 0),
-  hasInactiveThemes: Em.computed.gt("inactiveThemes.length", 0),
+  hasThemes: Ember.computed.gt("themesList.length", 0),
+  hasActiveThemes: Ember.computed.gt("activeThemes.length", 0),
+  hasInactiveThemes: Ember.computed.gt("inactiveThemes.length", 0),
 
-  themesTabActive: Em.computed.equal("currentTab", THEMES),
-  componentsTabActive: Em.computed.equal("currentTab", COMPONENTS),
+  themesTabActive: Ember.computed.equal("currentTab", THEMES),
+  componentsTabActive: Ember.computed.equal("currentTab", COMPONENTS),
 
   @computed("themes", "components", "currentTab")
   themesList(themes, components) {
-    if (this.get("themesTabActive")) {
+    if (this.themesTabActive) {
       return themes;
     } else {
       return components;
@@ -30,8 +30,8 @@ export default Ember.Component.extend({
     "themesList.@each.default"
   )
   inactiveThemes(themes) {
-    if (this.get("componentsTabActive")) {
-      return [];
+    if (this.componentsTabActive) {
+      return themes.filter(theme => theme.get("parent_themes.length") <= 0);
     }
     return themes.filter(
       theme => !theme.get("user_selectable") && !theme.get("default")
@@ -44,42 +44,31 @@ export default Ember.Component.extend({
     "themesList.@each.user_selectable",
     "themesList.@each.default"
   )
-  userThemes(themes) {
-    if (this.get("componentsTabActive")) {
-      return [];
-    }
-    themes = themes.filter(
-      theme => theme.get("user_selectable") || theme.get("default")
-    );
-    return _.sortBy(themes, t => {
-      return [
-        !t.get("default"),
-        !t.get("user_selectable"),
-        t.get("name").toLowerCase()
-      ];
-    });
-  },
-
-  didRender() {
-    this._super(...arguments);
-
-    // hide scrollbar
-    const $container = this.$(".themes-list-container");
-    const containerNode = $container[0];
-    if (containerNode) {
-      const width = containerNode.offsetWidth - containerNode.clientWidth;
-      $container.css("width", `calc(100% + ${width}px)`);
+  activeThemes(themes) {
+    if (this.componentsTabActive) {
+      return themes.filter(theme => theme.get("parent_themes.length") > 0);
+    } else {
+      themes = themes.filter(
+        theme => theme.get("user_selectable") || theme.get("default")
+      );
+      return _.sortBy(themes, t => {
+        return [
+          !t.get("default"),
+          !t.get("user_selectable"),
+          t.get("name").toLowerCase()
+        ];
+      });
     }
   },
 
   actions: {
     changeView(newTab) {
-      if (newTab !== this.get("currentTab")) {
+      if (newTab !== this.currentTab) {
         this.set("currentTab", newTab);
       }
     },
     navigateToTheme(theme) {
-      Em.getOwner(this)
+      Ember.getOwner(this)
         .lookup("router:main")
         .transitionTo("adminCustomizeThemes.show", theme);
     }

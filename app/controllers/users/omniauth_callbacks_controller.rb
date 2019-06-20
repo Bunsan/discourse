@@ -1,4 +1,6 @@
 # -*- encoding : utf-8 -*-
+# frozen_string_literal: true
+
 require_dependency 'email'
 require_dependency 'enum'
 require_dependency 'user_name_suggester'
@@ -25,37 +27,50 @@ class Users::OmniauthCallbacksController < ApplicationController
     authenticator = self.class.find_authenticator(params[:provider])
     provider = DiscoursePluginRegistry.auth_providers.find { |p| p.name == params[:provider] }
 
-    if authenticator.can_connect_existing_user? && current_user
+    if session.delete(:auth_reconnect) && authenticator.can_connect_existing_user? && current_user
+      # If we're reconnecting, don't actually try and log the user in
       @auth_result = authenticator.after_authenticate(auth, existing_account: current_user)
+      if provider&.full_screen_login || cookies['fsl']
+        cookies.delete('fsl')
+        return redirect_to Discourse.base_uri("/my/preferences/account")
+      else
+        @auth_result.authenticated = true
+        return respond_to do |format|
+          format.html
+          format.json { render json: @auth_result.to_client_hash }
+        end
+      end
     else
       @auth_result = authenticator.after_authenticate(auth)
     end
+    DiscourseEvent.trigger(:after_auth, authenticator, @auth_result)
 
-    origin = request.env['omniauth.origin']
+    preferred_origin = request.env['omniauth.origin']
 
     if SiteSetting.enable_sso_provider && payload = cookies.delete(:sso_payload)
-      origin = session_sso_provider_url + "?" + payload
+      preferred_origin = session_sso_provider_url + "?" + payload
     elsif cookies[:destination_url].present?
-      origin = cookies[:destination_url]
+      preferred_origin = cookies[:destination_url]
       cookies.delete(:destination_url)
     end
 
-    if origin.present?
+    if preferred_origin.present?
       parsed = begin
-        URI.parse(origin)
+        URI.parse(preferred_origin)
       rescue URI::Error
       end
 
-      if parsed
-        @origin = "#{parsed.path}?#{parsed.query}"
+      if parsed && (parsed.host == nil || parsed.host == Discourse.current_hostname)
+        @origin = +"#{parsed.path}"
+        @origin << "?#{parsed.query}" if parsed.query
       end
     end
 
     if @origin.blank?
       @origin = Discourse.base_uri("/")
-    else
-      @auth_result.destination_url = origin
     end
+
+    @auth_result.destination_url = @origin
 
     if @auth_result.failed?
       flash[:error] = @auth_result.failed_reason.html_safe
@@ -64,10 +79,10 @@ class Users::OmniauthCallbacksController < ApplicationController
       @auth_result.authenticator_name = authenticator.name
       complete_response_data
 
-      if (provider && provider.full_screen_login) || cookies['fsl']
+      if provider&.full_screen_login || cookies['fsl']
         cookies.delete('fsl')
         cookies['_bypass_cache'] = true
-        flash[:authentication_data] = @auth_result.to_client_hash.to_json
+        cookies[:authentication_data] = @auth_result.to_client_hash.to_json
         redirect_to @origin
       else
         respond_to do |format|

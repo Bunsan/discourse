@@ -10,9 +10,9 @@ export default DropdownSelectBoxComponent.extend({
   autoHighlight() {},
 
   computeHeaderContent() {
-    let content = this._super();
+    let content = this._super(...arguments);
     const pinnedGlobally = this.get("topic.pinned_globally");
-    const pinned = this.get("computedValue");
+    const pinned = this.computedValue;
     const globally = pinnedGlobally ? "_globally" : "";
     const state = pinned ? `pinned${globally}` : "unpinned";
     const title = I18n.t(`topic_statuses.${state}.title`);
@@ -20,7 +20,7 @@ export default DropdownSelectBoxComponent.extend({
     content.label = `${title}${iconHTML("caret-down")}`.htmlSafe();
     content.title = title;
     content.name = state;
-    content.icon = `thumb-tack${state === "unpinned" ? " unpinned" : ""}`;
+    content.icon = `thumbtack${state === "unpinned" ? " unpinned" : ""}`;
     return content;
   },
 
@@ -33,12 +33,12 @@ export default DropdownSelectBoxComponent.extend({
         id: "pinned",
         name: I18n.t("topic_statuses.pinned" + globally + ".title"),
         description: I18n.t("topic_statuses.pinned" + globally + ".help"),
-        icon: "thumb-tack"
+        icon: "thumbtack"
       },
       {
         id: "unpinned",
         name: I18n.t("topic_statuses.unpinned.title"),
-        icon: "thumb-tack unpinned",
+        icon: "thumbtack unpinned",
         description: I18n.t("topic_statuses.unpinned.help")
       }
     ]);
@@ -46,9 +46,9 @@ export default DropdownSelectBoxComponent.extend({
 
   actions: {
     onSelect() {
-      const topic = this.get("topic");
+      const topic = this.topic;
 
-      if (this.get("computedValue") === "unpinned") {
+      if (this.computedValue === "unpinned") {
         topic.clearPin();
       } else {
         topic.rePin();

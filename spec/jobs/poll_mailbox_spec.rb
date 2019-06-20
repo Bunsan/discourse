@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 require_dependency 'jobs/regular/process_post'
 
@@ -24,8 +26,6 @@ describe Jobs::PollMailbox do
   describe ".poll_pop3" do
 
     context "pop errors" do
-      let(:user) { Fabricate(:user) }
-
       before do
         Discourse.expects(:handle_job_exception).at_least_once
       end
@@ -43,7 +43,7 @@ describe Jobs::PollMailbox do
         i18n_key = 'dashboard.poll_pop3_auth_error'
 
         expect(AdminDashboardData.problem_message_check(i18n_key))
-          .to eq(I18n.t(i18n_key))
+          .to eq(I18n.t(i18n_key, base_path: Discourse.base_path))
       end
 
       it "logs an error on pop connection timeout error" do
@@ -54,7 +54,7 @@ describe Jobs::PollMailbox do
         i18n_key = 'dashboard.poll_pop3_timeout'
 
         expect(AdminDashboardData.problem_message_check(i18n_key))
-          .to eq(I18n.t(i18n_key))
+          .to eq(I18n.t(i18n_key, base_path: Discourse.base_path))
       end
     end
 

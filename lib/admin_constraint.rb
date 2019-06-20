@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'current_user'
 
 class AdminConstraint
@@ -12,7 +14,7 @@ class AdminConstraint
     provider.current_user &&
       provider.current_user.admin? &&
       custom_admin_check(request)
-  rescue Discourse::InvalidAccess
+  rescue Discourse::InvalidAccess, Discourse::ReadOnly
     false
   end
 

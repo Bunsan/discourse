@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'rate_limiter'
 
 class InvitesController < ApplicationController
@@ -19,16 +21,21 @@ class InvitesController < ApplicationController
 
     invite = Invite.find_by(invite_key: params[:id])
 
-    if invite.present? && !invite.redeemed?
-      store_preloaded("invite_info", MultiJson.dump(
-        invited_by: UserNameSerializer.new(invite.invited_by, scope: guardian, root: false),
-        email: invite.email,
-        username: UserNameSuggester.suggest(invite.email))
-      )
+    if invite.present?
+      if !invite.redeemed?
+        store_preloaded("invite_info", MultiJson.dump(
+          invited_by: UserNameSerializer.new(invite.invited_by, scope: guardian, root: false),
+          email: invite.email,
+          username: UserNameSuggester.suggest(invite.email))
+        )
 
-      render layout: 'application'
+        render layout: 'application'
+      else
+        flash.now[:error] = I18n.t('invite.not_found_template', site_name: SiteSetting.title, base_url: Discourse.base_url)
+        render layout: 'no_ember'
+      end
     else
-      flash.now[:error] = I18n.t('invite.not_found_template', site_name: SiteSetting.title, base_url: Discourse.base_url)
+      flash.now[:error] = I18n.t('invite.not_found')
       render layout: 'no_ember'
     end
   end
@@ -40,22 +47,26 @@ class InvitesController < ApplicationController
 
     if invite.present?
       begin
-        user = invite.redeem(username: params[:username], name: params[:name], password: params[:password], user_custom_fields: params[:user_custom_fields])
+        user = invite.redeem(username: params[:username], name: params[:name], password: params[:password], user_custom_fields: params[:user_custom_fields], ip_address: request.remote_ip)
         if user.present?
-          log_on_user(user)
+          log_on_user(user) if user.active?
           post_process_invite(user)
         end
 
-        topic = user.present? ? invite.topics.first : nil
+        response = { success: true }
+        if user.present? && user.active?
+          topic = invite.topics.first
+          response[:redirect_to] = topic.present? ? path("#{topic.relative_url}") : path("/")
+        else
+          response[:message] = I18n.t('invite.confirm_email')
+        end
 
-        render json: {
-          success: true,
-          redirect_to: topic.present? ? path("#{topic.relative_url}") : path("/")
-        }
+        render json: response
       rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
         render json: {
           success: false,
-          errors: e.record&.errors&.to_hash || {}
+          errors: e.record&.errors&.to_hash || {},
+          message: I18n.t('invite.error_message')
         }
       end
     else
@@ -134,7 +145,7 @@ class InvitesController < ApplicationController
   def rescind_all_invites
     guardian.ensure_can_rescind_all_invites!(current_user)
 
-    Invite.rescind_all_invites_from(current_user)
+    Invite.rescind_all_expired_invites_from(current_user)
     render body: nil
   end
 
@@ -161,24 +172,33 @@ class InvitesController < ApplicationController
   def upload_csv
     guardian.ensure_can_bulk_invite_to_forum!(current_user)
 
-    file = params[:file] || params[:files].first
-    name = params[:name] || File.basename(file.original_filename, ".*")
-    extension = File.extname(file.original_filename)
+    hijack do
+      begin
+        file = params[:file] || params[:files].first
 
-    begin
-      data = if extension.downcase == ".csv"
-        path = Invite.create_csv(file, name)
-        Jobs.enqueue(:bulk_invite, filename: "#{name}#{extension}", current_user_id: current_user.id)
-        { url: path }
-      else
-        failed_json.merge(errors: [I18n.t("bulk_invite.file_should_be_csv")])
+        count = 0
+        invites = []
+        max_bulk_invites = SiteSetting.max_bulk_invites
+        CSV.foreach(file.tempfile) do |row|
+          count += 1
+          invites.push(email: row[0], groups: row[1], topic_id: row[2]) if row[0].present?
+          break if count >= max_bulk_invites
+        end
+
+        if invites.present?
+          Jobs.enqueue(:bulk_invite, invites: invites, current_user_id: current_user.id)
+          if count >= max_bulk_invites
+            render json: failed_json.merge(errors: [I18n.t("bulk_invite.max_rows", max_bulk_invites: max_bulk_invites)]), status: 422
+          else
+            render json: success_json
+          end
+        else
+          render json: failed_json.merge(errors: [I18n.t("bulk_invite.error")]), status: 422
+        end
+      rescue
+        render json: failed_json.merge(errors: [I18n.t("bulk_invite.error")]), status: 422
       end
-    rescue
-      failed_json.merge(errors: [I18n.t("bulk_invite.error")])
     end
-    MessageBus.publish("/uploads/csv", data.as_json, user_ids: [current_user.id])
-
-    render json: success_json
   end
 
   def fetch_username
@@ -211,12 +231,23 @@ class InvitesController < ApplicationController
 
   def post_process_invite(user)
     user.enqueue_welcome_message('welcome_invite') if user.send_welcome_message
+
+    Group.refresh_automatic_groups!(:admins, :moderators, :staff) if user.staff?
+
     if user.has_password?
-      email_token = user.email_tokens.create(email: user.email)
-      Jobs.enqueue(:critical_user_email, type: :signup, user_id: user.id, email_token: email_token.token)
+      send_activation_email(user) unless user.active
     elsif !SiteSetting.enable_sso && SiteSetting.enable_local_logins
       Jobs.enqueue(:invite_password_instructions_email, username: user.username)
     end
   end
 
+  def send_activation_email(user)
+    email_token = user.email_tokens.create!(email: user.email)
+
+    Jobs.enqueue(:critical_user_email,
+                 type: :signup,
+                 user_id: user.id,
+                 email_token: email_token.token
+    )
+  end
 end

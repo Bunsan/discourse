@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class DirectoryItemsController < ApplicationController
   PAGE_SIZE = 50
 
@@ -7,11 +9,12 @@ class DirectoryItemsController < ApplicationController
     period = params.require(:period)
     period_type = DirectoryItem.period_types[period.to_sym]
     raise Discourse::InvalidAccess.new(:period_type) unless period_type
-
     result = DirectoryItem.where(period_type: period_type).includes(:user)
 
     if params[:group]
       result = result.includes(user: :groups).where(users: { groups: { name: params[:group] } })
+    else
+      result = result.includes(user: :primary_group)
     end
 
     if params[:exclude_usernames]

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class BasicGroupSerializer < ApplicationSerializer
   attributes :id,
              :automatic,
@@ -19,6 +21,7 @@ class BasicGroupSerializer < ApplicationSerializer
              :flair_color,
              :bio_raw,
              :bio_cooked,
+             :bio_excerpt,
              :public_admission,
              :public_exit,
              :allow_membership_requests,
@@ -38,8 +41,20 @@ class BasicGroupSerializer < ApplicationSerializer
     end
   end
 
+  def bio_excerpt
+    PrettyText.excerpt(object.bio_cooked, 110) if object.bio_cooked.present?
+  end
+
   def include_incoming_email?
     staff?
+  end
+
+  def include_automatic_membership_email_domains?
+    scope.is_admin?
+  end
+
+  def include_automatic_membership_retroactive?
+    scope.is_admin?
   end
 
   def include_has_messages?

@@ -21,24 +21,45 @@ function addBulkButton(action, key, opts) {
 }
 
 // Default buttons
-addBulkButton("showChangeCategory", "change_category", { icon: "pencil" });
-addBulkButton("closeTopics", "close_topics", { icon: "lock" });
-addBulkButton("archiveTopics", "archive_topics", { icon: "folder" });
-addBulkButton("showNotificationLevel", "notification_level", {
-  icon: "d-regular"
+addBulkButton("showChangeCategory", "change_category", {
+  icon: "pencil-alt",
+  class: "btn-default"
 });
-addBulkButton("resetRead", "reset_read", { icon: "backward" });
+addBulkButton("closeTopics", "close_topics", {
+  icon: "lock",
+  class: "btn-default"
+});
+addBulkButton("archiveTopics", "archive_topics", {
+  icon: "folder",
+  class: "btn-default"
+});
+addBulkButton("showNotificationLevel", "notification_level", {
+  icon: "d-regular",
+  class: "btn-default"
+});
+addBulkButton("resetRead", "reset_read", {
+  icon: "backward",
+  class: "btn-default"
+});
 addBulkButton("unlistTopics", "unlist_topics", {
-  icon: "eye-slash",
+  icon: "far-eye-slash",
+  class: "btn-default",
   buttonVisible: topics => topics.some(t => t.visible)
 });
 addBulkButton("relistTopics", "relist_topics", {
-  icon: "eye",
+  icon: "far-eye",
+  class: "btn-default",
   buttonVisible: topics => topics.some(t => !t.visible)
 });
 if (Discourse.SiteSettings.tagging_enabled) {
-  addBulkButton("showTagTopics", "change_tags", { icon: "tag" });
-  addBulkButton("showAppendTagTopics", "append_tags", { icon: "tag" });
+  addBulkButton("showTagTopics", "change_tags", {
+    icon: "tag",
+    class: "btn-default"
+  });
+  addBulkButton("showAppendTagTopics", "append_tags", {
+    icon: "tag",
+    class: "btn-default"
+  });
 }
 addBulkButton("deleteTopics", "delete", { icon: "trash", class: "btn-danger" });
 
@@ -80,7 +101,7 @@ export default Ember.Controller.extend(ModalFunctionality, {
     this.perform(operation).then(topics => {
       if (topics) {
         topics.forEach(cb);
-        (this.get("refreshClosure") || identity)();
+        (this.refreshClosure || identity)();
         this.send("closeModal");
       }
     });
@@ -88,7 +109,7 @@ export default Ember.Controller.extend(ModalFunctionality, {
 
   performAndRefresh(operation) {
     return this.perform(operation).then(() => {
-      (this.get("refreshClosure") || identity)();
+      (this.refreshClosure || identity)();
       this.send("closeModal");
     });
   },
@@ -103,7 +124,7 @@ export default Ember.Controller.extend(ModalFunctionality, {
     },
 
     changeTags() {
-      this.performAndRefresh({ type: "change_tags", tags: this.get("tags") });
+      this.performAndRefresh({ type: "change_tags", tags: this.tags });
     },
 
     showAppendTagTopics() {
@@ -115,7 +136,7 @@ export default Ember.Controller.extend(ModalFunctionality, {
     },
 
     appendTags() {
-      this.performAndRefresh({ type: "append_tags", tags: this.get("tags") });
+      this.performAndRefresh({ type: "append_tags", tags: this.tags });
     },
 
     showChangeCategory() {
@@ -147,13 +168,13 @@ export default Ember.Controller.extend(ModalFunctionality, {
     },
 
     changeCategory() {
-      const categoryId = parseInt(this.get("newCategoryId"), 10) || 0;
+      const categoryId = parseInt(this.newCategoryId, 10) || 0;
       const category = Discourse.Category.findById(categoryId);
 
       this.perform({ type: "change_category", category_id: categoryId }).then(
         topics => {
           topics.forEach(t => t.set("category", category));
-          (this.get("refreshClosure") || identity)();
+          (this.refreshClosure || identity)();
           this.send("closeModal");
         }
       );

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe SiteSettingsTask do
@@ -8,10 +10,15 @@ describe SiteSettingsTask do
 
   describe 'export' do
     it 'creates a hash of all site settings' do
-      SiteSetting.sso_url = "https://somewhere.over.com"
+      sso_url = "https://somewhere.over.com"
+      SiteSetting.sso_url = sso_url
       SiteSetting.enable_sso = true
-      h = SiteSettingsTask.export_to_hash
-      expect(h.count).to eq(2)
+      hash = SiteSettingsTask.export_to_hash
+
+      expect(hash).to eq(
+        "enable_sso" => "true",
+        "sso_url" => sso_url
+      )
     end
   end
 
@@ -22,6 +29,14 @@ describe SiteSettingsTask do
       expect(log[0]).to eq "Changed title FROM: Discourse TO: Test"
       expect(counts[:updated]).to eq 1
       expect(SiteSetting.title).to eq "Test"
+    end
+
+    it "updates hidden settings" do
+      yml = "logo_url: /logo.png"
+      log, counts = SiteSettingsTask.import(yml)
+      expect(log[0]).to eq "Changed logo_url FROM: /images/d-logo-sketch.png TO: /logo.png"
+      expect(counts[:updated]).to eq 1
+      expect(SiteSetting.logo_url).to eq "/logo.png"
     end
 
     it "won't update a setting that doesn't exist" do

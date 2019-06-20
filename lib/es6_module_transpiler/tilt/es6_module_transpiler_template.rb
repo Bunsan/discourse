@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'execjs'
 require 'mini_racer'
 
@@ -28,7 +30,7 @@ module Tilt
       ctx = MiniRacer::Context.new(timeout: 15000)
       ctx.eval("var self = this; #{File.read("#{Rails.root}/vendor/assets/javascripts/babel.js")}")
       ctx.eval(File.read(Ember::Source.bundled_path_for('ember-template-compiler.js')))
-      ctx.eval("module = {}; exports = {};");
+      ctx.eval("module = {}; exports = {};")
       ctx.attach("rails.logger.info", proc { |err| Rails.logger.info(err.to_s) })
       ctx.attach("rails.logger.error", proc { |err| Rails.logger.error(err.to_s) })
       ctx.eval <<JS
@@ -161,8 +163,8 @@ JS
           result = "Route" if result == "DiscourseRoute"
           result = "View" if result == "ViewView"
 
-          result.gsub!(/Mixin$/, '')
-          result.gsub!(/Model$/, '')
+          result = result.gsub(/Mixin$/, '')
+          result = result.gsub(/Model$/, '')
 
           if result != "PostMenuView"
             @output << "\n\nDiscourse.#{result} = require('#{require_name}').default;\n"

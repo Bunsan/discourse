@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe CspReportsController do
@@ -37,7 +39,7 @@ describe CspReportsController do
       SiteSetting.content_security_policy_report_only = false
       SiteSetting.content_security_policy_collect_reports = true
       send_report
-      expect(response.status).to eq(404)
+      expect(response.status).to eq(200)
 
       SiteSetting.content_security_policy = true
       send_report

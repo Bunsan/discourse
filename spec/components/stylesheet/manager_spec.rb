@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 require 'stylesheet/compiler'
 
@@ -12,6 +14,11 @@ describe Stylesheet::Manager do
     SiteSetting.default_theme_id = theme.id
 
     link = Stylesheet::Manager.stylesheet_link_tag(:embedded_theme)
+    expect(link).not_to eq("")
+  end
+
+  it "still returns something for no themes" do
+    link = Stylesheet::Manager.stylesheet_link_tag(:desktop, 'all', [])
     expect(link).not_to eq("")
   end
 
@@ -145,12 +152,12 @@ describe Stylesheet::Manager do
 
       digest1 = manager.color_scheme_digest
 
-      category2.update_attributes(uploaded_background_id: 789, updated_at: 1.day.ago)
+      category2.update(uploaded_background_id: 789, updated_at: 1.day.ago)
 
       digest2 = manager.color_scheme_digest
       expect(digest2).to_not eq(digest1)
 
-      category1.update_attributes(uploaded_background_id: nil, updated_at: 5.minutes.ago)
+      category1.update(uploaded_background_id: nil, updated_at: 5.minutes.ago)
 
       digest3 = manager.color_scheme_digest
       expect(digest3).to_not eq(digest2)

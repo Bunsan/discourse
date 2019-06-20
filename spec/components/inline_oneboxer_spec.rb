@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 require_dependency 'inline_oneboxer'
 
@@ -22,7 +24,7 @@ describe InlineOneboxer do
   end
 
   context "caching" do
-    let(:topic) { Fabricate(:topic) }
+    fab!(:topic) { Fabricate(:topic) }
 
     before do
       InlineOneboxer.purge(topic.url)
@@ -35,9 +37,23 @@ describe InlineOneboxer do
       expect(result).to be_present
 
       cached = InlineOneboxer.cache_lookup(topic.url)
-      expect(cached).to be_present
       expect(cached[:url]).to eq(topic.url)
       expect(cached[:title]).to eq(topic.title)
+    end
+
+    it "puts an entry in the cache for failed onebox" do
+      SiteSetting.enable_inline_onebox_on_all_domains = true
+      url = "https://example.com/random-url"
+
+      InlineOneboxer.purge(url)
+      expect(InlineOneboxer.cache_lookup(url)).to be_blank
+
+      result = InlineOneboxer.lookup(url)
+      expect(result).to be_present
+
+      cached = InlineOneboxer.cache_lookup(url)
+      expect(cached[:url]).to eq(url)
+      expect(cached[:title]).to be_nil
     end
   end
 

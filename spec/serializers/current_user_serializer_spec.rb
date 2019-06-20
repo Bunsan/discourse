@@ -1,8 +1,10 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 RSpec.describe CurrentUserSerializer do
   context "when SSO is not enabled" do
-    let(:user) { Fabricate(:user) }
+    fab!(:user) { Fabricate(:user) }
     let :serializer do
       CurrentUserSerializer.new(user, scope: Guardian.new, root: false)
     end
@@ -34,10 +36,10 @@ RSpec.describe CurrentUserSerializer do
   end
 
   context "#top_category_ids" do
-    let(:user) { Fabricate(:user) }
-    let(:category1) { Fabricate(:category) }
-    let(:category2) { Fabricate(:category) }
-    let(:category3) { Fabricate(:category) }
+    fab!(:user) { Fabricate(:user) }
+    fab!(:category1) { Fabricate(:category) }
+    fab!(:category2) { Fabricate(:category) }
+    fab!(:category3) { Fabricate(:category) }
     let :serializer do
       CurrentUserSerializer.new(user, scope: Guardian.new, root: false)
     end
@@ -48,7 +50,7 @@ RSpec.describe CurrentUserSerializer do
     end
 
     it "should include correct id in top_category_ids array" do
-      category = Category.first
+      _category = Category.first
       CategoryUser.create!(user_id: user.id,
                            category_id: category1.id,
                            notification_level: CategoryUser.notification_levels[:tracking])
@@ -63,6 +65,26 @@ RSpec.describe CurrentUserSerializer do
 
       payload = serializer.as_json
       expect(payload[:top_category_ids]).to eq([category2.id, category1.id])
+    end
+  end
+
+  context "#groups" do
+    fab!(:member) { Fabricate(:user) }
+    let :serializer do
+      CurrentUserSerializer.new(member, scope: Guardian.new, root: false)
+    end
+
+    it "should only show visible groups" do
+      Fabricate.build(:group, visibility_level: Group.visibility_levels[:public])
+      hidden_group = Fabricate.build(:group, visibility_level: Group.visibility_levels[:owners])
+      public_group = Fabricate.build(:group, visibility_level: Group.visibility_levels[:public])
+      hidden_group.add(member)
+      hidden_group.save!
+      public_group.add(member)
+      public_group.save!
+      payload = serializer.as_json
+
+      expect(payload[:groups]).to eq([{ id: public_group.id, name: public_group.name }])
     end
   end
 end

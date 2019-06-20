@@ -11,7 +11,6 @@ export default ComboBoxComponent.extend(TagsMixin, {
   verticalOffset: 3,
   value: Ember.computed.alias("tagId"),
   headerComponent: "tag-drop/tag-drop-header",
-  rowComponent: "tag-drop/tag-drop-row",
   allowAutoSelectFirst: false,
   tagName: "li",
   showFilterByTag: Ember.computed.alias("siteSettings.show_filter_by_tag"),
@@ -27,7 +26,7 @@ export default ComboBoxComponent.extend(TagsMixin, {
 
   @computed("tagId")
   noTagsSelected() {
-    return this.get("tagId") === "none";
+    return this.tagId === "none";
   },
 
   @computed("showFilterByTag", "content")
@@ -42,15 +41,19 @@ export default ComboBoxComponent.extend(TagsMixin, {
   },
 
   computeHeaderContent() {
-    let content = this._super();
+    let content = this._super(...arguments);
 
     if (!content.value) {
-      if (this.get("tagId")) {
-        content.title = this.get("tagId");
-      } else if (this.get("noTagsSelected")) {
-        content.title = this.get("noTagsLabel");
+      if (this.tagId) {
+        if (this.tagId === "none") {
+          content.title = this.noTagsLabel;
+        } else {
+          content.title = this.tagId;
+        }
+      } else if (this.noTagsSelected) {
+        content.title = this.noTagsLabel;
       } else {
-        content.title = this.get("allTagsLabel");
+        content.title = this.allTagsLabel;
       }
     } else {
       content.title = content.value;
@@ -66,43 +69,20 @@ export default ComboBoxComponent.extend(TagsMixin, {
 
   @computed("firstCategory", "secondCategory")
   allTagsUrl() {
-    if (this.get("currentCategory")) {
-      return this.get("currentCategory.url") + "?allTags=1";
+    if (this.currentCategory) {
+      return Discourse.getURL(this.get("currentCategory.url") + "?allTags=1");
     } else {
-      return "/";
+      return Discourse.getURL("/");
     }
   },
 
   @computed("firstCategory", "secondCategory")
   noTagsUrl() {
     var url = "/tags";
-    if (this.get("currentCategory")) {
+    if (this.currentCategory) {
       url += this.get("currentCategory.url");
     }
-    return `${url}/none`;
-  },
-
-  @computed("allTagsUrl", "allTagsLabel", "noTagsUrl", "noTagsLabel")
-  collectionHeader(allTagsUrl, allTagsLabel, noTagsUrl, noTagsLabel) {
-    let content = "";
-
-    if (this.get("tagId") !== "none") {
-      content += `
-        <a href="${noTagsUrl}" class="tag-filter">
-          ${noTagsLabel}
-        </a>
-      `;
-    }
-
-    if (this.get("tagId")) {
-      content += `
-        <a href="${allTagsUrl}" class="tag-filter">
-          ${allTagsLabel}
-        </a>
-      `;
-    }
-
-    return content;
+    return Discourse.getURL(`${url}/none`);
   },
 
   @computed("tag")
@@ -115,12 +95,35 @@ export default ComboBoxComponent.extend(TagsMixin, {
     return I18n.t("tagging.selector_no_tags");
   },
 
-  @computed("site.top_tags")
-  content(topTags) {
+  @computed("tagId", "allTagsLabel", "noTagsLabel")
+  shortcuts(tagId, allTagsLabel, noTagsLabel) {
+    const shortcuts = [];
+
+    if (tagId !== "none") {
+      shortcuts.push({
+        name: noTagsLabel,
+        __sk_row_type: "noopRow",
+        id: "no-tags"
+      });
+    }
+
+    if (tagId) {
+      shortcuts.push({
+        name: allTagsLabel,
+        __sk_row_type: "noopRow",
+        id: "all-tags"
+      });
+    }
+
+    return shortcuts;
+  },
+
+  @computed("site.top_tags", "shortcuts")
+  content(topTags, shortcuts) {
     if (this.siteSettings.tags_sort_alphabetically && topTags) {
-      return topTags.sort();
+      return shortcuts.concat(topTags.sort());
     } else {
-      return topTags;
+      return shortcuts.concat(Ember.makeArray(topTags));
     }
   },
 
@@ -136,28 +139,40 @@ export default ComboBoxComponent.extend(TagsMixin, {
   _transformJson(context, json) {
     let results = json.results;
     results = results.sort((a, b) => a.id > b.id);
-    return results;
+
+    return results.map(r => {
+      return { id: r.id, name: r.text };
+    });
   },
 
   actions: {
     onSelect(tagId) {
-      let url = "/tags";
-      if (this.get("currentCategory")) {
-        url += this.get("currentCategory.url");
+      let url;
+
+      if (tagId === "all-tags") {
+        url = Discourse.getURL(this.allTagsUrl);
+      } else if (tagId === "no-tags") {
+        url = Discourse.getURL(this.noTagsUrl);
+      } else {
+        url = "/tags";
+        if (this.currentCategory) {
+          url += this.get("currentCategory.url");
+        }
+        url = Discourse.getURL(`${url}/${tagId.toLowerCase()}`);
       }
-      url = `${url}/${tagId.toLowerCase()}`;
+
       DiscourseURL.routeTo(url);
     },
 
     onExpand() {
-      if (isEmpty(this.get("asyncContent"))) {
-        this.set("asyncContent", this.get("content"));
+      if (isEmpty(this.asyncContent)) {
+        this.set("asyncContent", this.content);
       }
     },
 
     onFilter(filter) {
       if (isEmpty(filter)) {
-        this.set("asyncContent", this.get("content"));
+        this.set("asyncContent", this.content);
         return;
       }
 

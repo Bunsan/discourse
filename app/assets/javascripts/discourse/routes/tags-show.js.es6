@@ -6,16 +6,21 @@ import PermissionType from "discourse/models/permission-type";
 export default Discourse.Route.extend({
   navMode: "latest",
 
+  queryParams: {
+    ascending: { refreshModel: true },
+    order: { refreshModel: true }
+  },
+
   renderTemplate() {
     const controller = this.controllerFor("tags.show");
     this.render("tags.show", { controller });
   },
 
   model(params) {
-    var tag = this.store.createRecord("tag", {
-        id: Handlebars.Utils.escapeExpression(params.tag_id)
-      }),
-      f = "";
+    const tag = this.store.createRecord("tag", {
+      id: Handlebars.Utils.escapeExpression(params.tag_id)
+    });
+    let f = "";
 
     if (params.additional_tags) {
       this.set(
@@ -33,11 +38,11 @@ export default Discourse.Route.extend({
     if (params.category) {
       f = "c/";
       if (params.parent_category) {
-        f += params.parent_category + "/";
+        f += `${params.parent_category}/`;
       }
-      f += params.category + "/l/";
+      f += `${params.category}/l/`;
     }
-    f += this.get("navMode");
+    f += this.navMode;
     this.set("filterMode", f);
 
     if (params.category) {
@@ -47,7 +52,7 @@ export default Discourse.Route.extend({
       this.set("parentCategorySlug", params.parent_category);
     }
 
-    if (tag && tag.get("id") !== "none" && this.get("currentUser")) {
+    if (tag && tag.get("id") !== "none" && this.currentUser) {
       // If logged in, we should get the tag's user settings
       return this.store
         .find("tagNotification", tag.get("id").toLowerCase())
@@ -60,38 +65,40 @@ export default Discourse.Route.extend({
     return tag;
   },
 
-  afterModel(tag) {
+  afterModel(tag, transition) {
     const controller = this.controllerFor("tags.show");
     controller.set("loading", true);
 
     const params = controller.getProperties("order", "ascending");
+    params.order = transition.to.queryParams.order || params.order;
+    params.ascending = transition.to.queryParams.ascending || params.ascending;
 
-    const categorySlug = this.get("categorySlug");
-    const parentCategorySlug = this.get("parentCategorySlug");
-    const filter = this.get("navMode");
-    const tag_id = tag ? tag.id.toLowerCase() : "none";
+    const categorySlug = this.categorySlug;
+    const parentCategorySlug = this.parentCategorySlug;
+    const filter = this.navMode;
+    const tagId = tag ? tag.id.toLowerCase() : "none";
 
     if (categorySlug) {
-      var category = Discourse.Category.findBySlug(
+      const category = Discourse.Category.findBySlug(
         categorySlug,
         parentCategorySlug
       );
       if (parentCategorySlug) {
-        params.filter = `tags/c/${parentCategorySlug}/${categorySlug}/${tag_id}/l/${filter}`;
+        params.filter = `tags/c/${parentCategorySlug}/${categorySlug}/${tagId}/l/${filter}`;
       } else {
-        params.filter = `tags/c/${categorySlug}/${tag_id}/l/${filter}`;
+        params.filter = `tags/c/${categorySlug}/${tagId}/l/${filter}`;
       }
       if (category) {
         category.setupGroupsAndPermissions();
         this.set("category", category);
       }
-    } else if (this.get("additionalTags")) {
-      params.filter = `tags/intersection/${tag_id}/${this.get(
+    } else if (this.additionalTags) {
+      params.filter = `tags/intersection/${tagId}/${this.get(
         "additionalTags"
       ).join("/")}`;
       this.set("category", null);
     } else {
-      params.filter = `tags/${tag_id}/l/${filter}`;
+      params.filter = `tags/${tagId}/l/${filter}`;
       this.set("category", null);
     }
 
@@ -100,29 +107,34 @@ export default Discourse.Route.extend({
       this.topicTrackingState,
       params.filter,
       params,
-      {}
+      { cached: true }
     ).then(list => {
-      if (list.topic_list.tags) {
-        tag.set("id", list.topic_list.tags[0].name); // Update name of tag (case might be different)
+      if (list.topic_list.tags && list.topic_list.tags.length === 1) {
+        // Update name of tag (case might be different)
+        tag.setProperties({
+          id: list.topic_list.tags[0].name,
+          staff: list.topic_list.tags[0].staff
+        });
       }
       controller.setProperties({
-        list: list,
+        list,
         canCreateTopic: list.get("can_create_topic"),
         loading: false,
         canCreateTopicOnCategory:
-          this.get("category.permission") === PermissionType.FULL
+          this.get("category.permission") === PermissionType.FULL,
+        canCreateTopicOnTag: !tag.get("staff") || this.get("currentUser.staff")
       });
     });
   },
 
   titleToken() {
     const filterText = I18n.t(
-        "filters." + this.get("navMode").replace("/", ".") + ".title"
-      ),
-      controller = this.controllerFor("tags.show");
+      `filters.${this.navMode.replace("/", ".")}.title`
+    );
+    const controller = this.controllerFor("tags.show");
 
     if (controller.get("model.id")) {
-      if (this.get("category")) {
+      if (this.category) {
         return I18n.t("tagging.filters.with_category", {
           filter: filterText,
           tag: controller.get("model.id"),
@@ -135,7 +147,7 @@ export default Discourse.Route.extend({
         });
       }
     } else {
-      if (this.get("category")) {
+      if (this.category) {
         return I18n.t("tagging.filters.untagged_with_category", {
           filter: filterText,
           category: this.get("category.name")
@@ -152,11 +164,11 @@ export default Discourse.Route.extend({
     this.controllerFor("tags.show").setProperties({
       model,
       tag: model,
-      additionalTags: this.get("additionalTags"),
-      category: this.get("category"),
-      filterMode: this.get("filterMode"),
-      navMode: this.get("navMode"),
-      tagNotification: this.get("tagNotification")
+      additionalTags: this.additionalTags,
+      category: this.category,
+      filterMode: this.filterMode,
+      navMode: this.navMode,
+      tagNotification: this.tagNotification
     });
   },
 
@@ -170,8 +182,7 @@ export default Discourse.Route.extend({
     },
 
     createTopic() {
-      var controller = this.controllerFor("tags.show"),
-        self = this;
+      const controller = this.controllerFor("tags.show");
 
       if (controller.get("list.draft")) {
         this.openTopicDraft(controller.get("list"));
@@ -183,11 +194,12 @@ export default Discourse.Route.extend({
             draftKey: controller.get("list.draft_key"),
             draftSequence: controller.get("list.draft_sequence")
           })
-          .then(function() {
+          .then(() => {
             // Pre-fill the tags input field
             if (controller.get("model.id")) {
-              var c = self.controllerFor("composer").get("model");
-              c.set(
+              const composerModel = this.controllerFor("composer").get("model");
+
+              composerModel.set(
                 "tags",
                 _.compact(
                   _.flatten([

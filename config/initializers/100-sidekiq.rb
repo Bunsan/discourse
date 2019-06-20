@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "sidekiq/pausable"
 
 Sidekiq.configure_client do |config|
@@ -24,8 +26,12 @@ MiniScheduler.configure do |config|
     DiscourseEvent.trigger(:scheduled_job_ran, stat)
   end
 
+  config.skip_schedule { Sidekiq.paused? }
+
   config.before_sidekiq_web_request do
-    RailsMultisite::ConnectionManagement.establish_connection(db: 'default')
+    RailsMultisite::ConnectionManagement.establish_connection(
+      db: RailsMultisite::ConnectionManagement::DEFAULT
+    )
   end
 
 end
@@ -46,7 +52,7 @@ if Sidekiq.server?
   Scheduler::Defer.async = false
 
   # warm up AR
-  RailsMultisite::ConnectionManagement.each_connection do
+  RailsMultisite::ConnectionManagement.safe_each_connection do
     (ActiveRecord::Base.connection.tables - %w[schema_migrations]).each do |table|
       table.classify.constantize.first rescue nil
     end

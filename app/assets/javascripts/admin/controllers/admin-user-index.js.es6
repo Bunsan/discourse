@@ -3,19 +3,16 @@ import CanCheckEmails from "discourse/mixins/can-check-emails";
 import { propertyNotEqual, setting } from "discourse/lib/computed";
 import { userPath } from "discourse/lib/url";
 import { popupAjaxError } from "discourse/lib/ajax-error";
-import computed from "ember-addons/ember-computed-decorators";
+import { default as computed } from "ember-addons/ember-computed-decorators";
+import { fmt } from "discourse/lib/computed";
 
 export default Ember.Controller.extend(CanCheckEmails, {
   adminTools: Ember.inject.service(),
-  editingUsername: false,
-  editingName: false,
-  editingTitle: false,
   originalPrimaryGroupId: null,
   customGroupIdsBuffer: null,
   availableGroups: null,
   userTitleValue: null,
 
-  showApproval: setting("must_approve_users"),
   showBadges: setting("enable_badges"),
   hasLockedTrustLevel: Ember.computed.notEmpty(
     "model.manual_locked_trust_level"
@@ -50,7 +47,7 @@ export default Ember.Controller.extend(CanCheckEmails, {
     return automaticGroups
       .map(group => {
         const name = Ember.String.htmlSafe(group.name);
-        return `<a href="/groups/${name}">${name}</a>`;
+        return `<a href="/g/${name}">${name}</a>`;
       })
       .join(", ");
   },
@@ -67,23 +64,12 @@ export default Ember.Controller.extend(CanCheckEmails, {
       .join(", ");
   },
 
-  userFields: function() {
-    const siteUserFields = this.site.get("user_fields"),
-      userFields = this.get("model.user_fields");
-
-    if (!Ember.isEmpty(siteUserFields)) {
-      return siteUserFields.map(function(uf) {
-        let value = userFields ? userFields[uf.get("id").toString()] : null;
-        return { name: uf.get("name"), value: value };
-      });
-    }
-    return [];
-  }.property("model.user_fields.[]"),
-
-  @computed("model.username_lower")
-  preferencesPath(username) {
-    return userPath(`${username}/preferences`);
+  @computed("model.user_fields.[]")
+  userFields(userFields) {
+    return this.site.collectUserFields(userFields);
   },
+
+  preferencesPath: fmt("model.username_lower", userPath("%@/preferences")),
 
   @computed("model.can_delete_all_posts", "model.staff", "model.post_count")
   deleteAllPostsExplanation(canDeleteAllPosts, staff, postCount) {
@@ -121,142 +107,121 @@ export default Ember.Controller.extend(CanCheckEmails, {
   },
 
   groupAdded(added) {
-    this.get("model")
+    this.model
       .groupAdded(added)
-      .catch(function() {
-        bootbox.alert(I18n.t("generic_error"));
-      });
+      .catch(() => bootbox.alert(I18n.t("generic_error")));
   },
 
   groupRemoved(groupId) {
-    this.get("model")
+    this.model
       .groupRemoved(groupId)
       .then(() => {
-        if (groupId === this.get("originalPrimaryGroupId")) {
+        if (groupId === this.originalPrimaryGroupId) {
           this.set("originalPrimaryGroupId", null);
         }
       })
-      .catch(function() {
-        bootbox.alert(I18n.t("generic_error"));
-      });
+      .catch(() => bootbox.alert(I18n.t("generic_error")));
   },
 
   actions: {
     impersonate() {
-      return this.get("model").impersonate();
+      return this.model.impersonate();
     },
     logOut() {
-      return this.get("model").logOut();
+      return this.model.logOut();
     },
     resetBounceScore() {
-      return this.get("model").resetBounceScore();
-    },
-    refreshBrowsers() {
-      return this.get("model").refreshBrowsers();
+      return this.model.resetBounceScore();
     },
     approve() {
-      return this.get("model").approve();
+      return this.model.approve();
     },
     deactivate() {
-      return this.get("model").deactivate();
+      return this.model.deactivate();
     },
     sendActivationEmail() {
-      return this.get("model").sendActivationEmail();
+      return this.model.sendActivationEmail();
     },
     activate() {
-      return this.get("model").activate();
+      return this.model.activate();
     },
     revokeAdmin() {
-      return this.get("model").revokeAdmin();
+      return this.model.revokeAdmin();
     },
     grantAdmin() {
-      return this.get("model").grantAdmin();
+      return this.model.grantAdmin();
     },
     revokeModeration() {
-      return this.get("model").revokeModeration();
+      return this.model.revokeModeration();
     },
     grantModeration() {
-      return this.get("model").grantModeration();
+      return this.model.grantModeration();
     },
     saveTrustLevel() {
-      return this.get("model").saveTrustLevel();
+      return this.model.saveTrustLevel();
     },
     restoreTrustLevel() {
-      return this.get("model").restoreTrustLevel();
+      return this.model.restoreTrustLevel();
     },
     lockTrustLevel(locked) {
-      return this.get("model").lockTrustLevel(locked);
+      return this.model.lockTrustLevel(locked);
     },
     unsilence() {
-      return this.get("model").unsilence();
+      return this.model.unsilence();
     },
     silence() {
-      return this.get("model").silence();
+      return this.model.silence();
     },
     deleteAllPosts() {
-      return this.get("model").deleteAllPosts();
+      return this.model.deleteAllPosts();
     },
     anonymize() {
-      return this.get("model").anonymize();
+      return this.model.anonymize();
     },
     disableSecondFactor() {
-      return this.get("model").disableSecondFactor();
+      return this.model.disableSecondFactor();
     },
 
     clearPenaltyHistory() {
-      let user = this.get("model");
-      return ajax(`/admin/users/${user.get("id")}/penalty_history`, {
-        type: "DELETE"
-      })
-        .then(() => {
-          user.set("tl3_requirements.penalty_counts.total", 0);
-        })
+      const user = this.model;
+      const path = `/admin/users/${user.get("id")}/penalty_history`;
+
+      return ajax(path, { type: "DELETE" })
+        .then(() => user.set("tl3_requirements.penalty_counts.total", 0))
         .catch(popupAjaxError);
     },
 
     destroy() {
       const postCount = this.get("model.post_count");
       if (postCount <= 5) {
-        return this.get("model").destroy({ deletePosts: true });
+        return this.model.destroy({ deletePosts: true });
       } else {
-        return this.get("model").destroy();
+        return this.model.destroy();
       }
     },
 
     viewActionLogs() {
-      this.get("adminTools").showActionLogs(this, {
+      this.adminTools.showActionLogs(this, {
         target_user: this.get("model.username")
       });
     },
-
-    showFlagsReceived() {
-      this.get("adminTools").showFlagsReceived(this.get("model"));
-    },
     showSuspendModal() {
-      this.get("adminTools").showSuspendModal(this.get("model"));
+      this.adminTools.showSuspendModal(this.model);
     },
     unsuspend() {
-      this.get("model")
-        .unsuspend()
-        .catch(popupAjaxError);
+      this.model.unsuspend().catch(popupAjaxError);
     },
     showSilenceModal() {
-      this.get("adminTools").showSilenceModal(this.get("model"));
+      this.adminTools.showSilenceModal(this.model);
     },
 
-    toggleUsernameEdit() {
-      this.set("userUsernameValue", this.get("model.username"));
-      this.toggleProperty("editingUsername");
-    },
-
-    saveUsername() {
+    saveUsername(newUsername) {
       const oldUsername = this.get("model.username");
-      this.set("model.username", this.get("userUsernameValue"));
+      this.set("model.username", newUsername);
 
-      return ajax(`/users/${oldUsername.toLowerCase()}/preferences/username`, {
-        data: { new_username: this.get("userUsernameValue") },
-        type: "PUT"
-      })
+      const path = `/users/${oldUsername.toLowerCase()}/preferences/username`;
+
+      return ajax(path, { data: { new_username: newUsername }, type: "PUT" })
         .catch(e => {
           this.set("model.username", oldUsername);
           popupAjaxError(e);
@@ -264,22 +229,13 @@ export default Ember.Controller.extend(CanCheckEmails, {
         .finally(() => this.toggleProperty("editingUsername"));
     },
 
-    toggleNameEdit() {
-      this.set("userNameValue", this.get("model.name"));
-      this.toggleProperty("editingName");
-    },
-
-    saveName() {
+    saveName(newName) {
       const oldName = this.get("model.name");
-      this.set("model.name", this.get("userNameValue"));
+      this.set("model.name", newName);
 
-      return ajax(
-        userPath(`${this.get("model.username").toLowerCase()}.json`),
-        {
-          data: { name: this.get("userNameValue") },
-          type: "PUT"
-        }
-      )
+      const path = userPath(`${this.get("model.username").toLowerCase()}.json`);
+
+      return ajax(path, { data: { name: newName }, type: "PUT" })
         .catch(e => {
           this.set("model.name", oldName);
           popupAjaxError(e);
@@ -287,41 +243,32 @@ export default Ember.Controller.extend(CanCheckEmails, {
         .finally(() => this.toggleProperty("editingName"));
     },
 
-    toggleTitleEdit() {
-      this.set("userTitleValue", this.get("model.title"));
-      this.toggleProperty("editingTitle");
-    },
+    saveTitle(newTitle) {
+      const oldTitle = this.get("model.title");
+      this.set("model.title", newTitle);
 
-    saveTitle() {
-      const prevTitle = this.get("userTitleValue");
+      const path = userPath(`${this.get("model.username").toLowerCase()}.json`);
 
-      this.set("model.title", this.get("userTitleValue"));
-      return ajax(
-        userPath(`${this.get("model.username").toLowerCase()}.json`),
-        {
-          data: { title: this.get("userTitleValue") },
-          type: "PUT"
-        }
-      )
+      return ajax(path, { data: { title: newTitle }, type: "PUT" })
         .catch(e => {
-          this.set("model.title", prevTitle);
+          this.set("model.title", oldTitle);
           popupAjaxError(e);
         })
         .finally(() => this.toggleProperty("editingTitle"));
     },
 
     generateApiKey() {
-      this.get("model").generateApiKey();
+      this.model.generateApiKey();
     },
 
     saveCustomGroups() {
-      const currentIds = this.get("customGroupIds");
-      const bufferedIds = this.get("customGroupIdsBuffer");
-      const availableGroups = this.get("availableGroups");
+      const currentIds = this.customGroupIds;
+      const bufferedIds = this.customGroupIdsBuffer;
+      const availableGroups = this.availableGroups;
 
-      bufferedIds.filter(id => !currentIds.includes(id)).forEach(id => {
-        this.groupAdded(availableGroups.findBy("id", id));
-      });
+      bufferedIds
+        .filter(id => !currentIds.includes(id))
+        .forEach(id => this.groupAdded(availableGroups.findBy("id", id)));
 
       currentIds
         .filter(id => !bufferedIds.includes(id))
@@ -333,52 +280,42 @@ export default Ember.Controller.extend(CanCheckEmails, {
     },
 
     savePrimaryGroup() {
-      const self = this;
+      const primaryGroupId = this.get("model.primary_group_id");
+      const path = `/admin/users/${this.get("model.id")}/primary_group`;
 
-      return ajax("/admin/users/" + this.get("model.id") + "/primary_group", {
+      return ajax(path, {
         type: "PUT",
-        data: { primary_group_id: this.get("model.primary_group_id") }
+        data: { primary_group_id: primaryGroupId }
       })
-        .then(function() {
-          self.set(
-            "originalPrimaryGroupId",
-            self.get("model.primary_group_id")
-          );
-        })
-        .catch(function() {
-          bootbox.alert(I18n.t("generic_error"));
-        });
+        .then(() => this.set("originalPrimaryGroupId", primaryGroupId))
+        .catch(() => bootbox.alert(I18n.t("generic_error")));
     },
 
     resetPrimaryGroup() {
-      this.set("model.primary_group_id", this.get("originalPrimaryGroupId"));
+      this.set("model.primary_group_id", this.originalPrimaryGroupId);
     },
 
     regenerateApiKey() {
-      const self = this;
-
       bootbox.confirm(
         I18n.t("admin.api.confirm_regen"),
         I18n.t("no_value"),
         I18n.t("yes_value"),
-        function(result) {
+        result => {
           if (result) {
-            self.get("model").generateApiKey();
+            this.model.generateApiKey();
           }
         }
       );
     },
 
     revokeApiKey() {
-      const self = this;
-
       bootbox.confirm(
         I18n.t("admin.api.confirm_revoke"),
         I18n.t("no_value"),
         I18n.t("yes_value"),
-        function(result) {
+        result => {
           if (result) {
-            self.get("model").revokeApiKey();
+            this.model.revokeApiKey();
           }
         }
       );

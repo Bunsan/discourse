@@ -1,42 +1,38 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 RSpec.describe 'Multisite SiteSettings', type: :multisite do
-  let(:conn) { RailsMultisite::ConnectionManagement }
-
   before do
     @original_provider = SiteSetting.provider
     SiteSetting.provider = SiteSettings::DbProvider.new(SiteSetting)
   end
 
   after do
-    ['default', 'second'].each do |db|
-      conn.with_connection(db) { SiteSetting.where(name: 'default_locale').destroy_all }
-    end
-
     SiteSetting.provider = @original_provider
   end
 
   describe '#default_locale' do
     it 'should return the right locale' do
-      conn.with_connection('default') do
-        expect(SiteSetting.default_locale).to eq('en')
+      test_multisite_connection('default') do
+        expect(SiteSetting.default_locale).to eq('en_US')
       end
 
-      conn.with_connection('second') do
+      test_multisite_connection('second') do
         SiteSetting.default_locale = 'zh_TW'
 
         expect(SiteSetting.default_locale).to eq('zh_TW')
       end
 
-      conn.with_connection('default') do
-        expect(SiteSetting.default_locale).to eq('en')
+      test_multisite_connection('default') do
+        expect(SiteSetting.default_locale).to eq('en_US')
 
         SiteSetting.default_locale = 'ja'
 
         expect(SiteSetting.default_locale).to eq('ja')
       end
 
-      conn.with_connection('second') do
+      test_multisite_connection('second') do
         expect(SiteSetting.default_locale).to eq('zh_TW')
       end
     end

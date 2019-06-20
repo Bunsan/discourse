@@ -5,7 +5,7 @@ import { bufferedRender } from "discourse-common/lib/buffered-render";
 
 export default Ember.Component.extend(
   bufferedRender({
-    rerenderTriggers: ["site.isReadOnly"],
+    rerenderTriggers: ["site.isReadOnly", "siteSettings.disable_emails"],
 
     buildBuffer(buffer) {
       let notices = [];
@@ -25,8 +25,7 @@ export default Ember.Component.extend(
 
       if (
         this.siteSettings.disable_emails === "yes" ||
-        (this.siteSettings.disable_emails === "non-staff" &&
-          !(this.currentUser && this.currentUser.get("staff")))
+        this.siteSettings.disable_emails === "non-staff"
       ) {
         notices.push([I18n.t("emails_are_disabled"), "alert-emails-disabled"]);
       }
@@ -72,32 +71,52 @@ export default Ember.Component.extend(
 
       if (notices.length > 0) {
         buffer.push(
-          _.map(notices, n => {
-            var html = `<div class='row'><div class='alert alert-info ${
-              n[1]
-            }'>`;
-            if (n[2]) html += n[2];
-            html += `${n[0]}</div></div>`;
-            return html;
-          }).join("")
+          notices
+            .map(n => {
+              var html = `<div class='row'><div class='alert alert-info ${
+                n[1]
+              }'>`;
+              if (n[2]) html += n[2];
+              html += `${n[0]}</div></div>`;
+              return html;
+            })
+            .join("")
         );
       }
     },
 
     @on("didInsertElement")
     _setupLogsNotice() {
-      LogsNotice.current().addObserver("hidden", () => {
-        this.rerenderBuffer();
-      });
+      this._boundRerenderBuffer = Ember.run.bind(this, this.rerenderBuffer);
+      LogsNotice.current().addObserver("hidden", this._boundRerenderBuffer);
 
-      this.$().on("click.global-notice", ".alert-logs-notice .close", () => {
-        LogsNotice.currentProp("text", "");
-      });
+      this._boundResetCurrentProp = Ember.run.bind(
+        this,
+        this._resetCurrentProp
+      );
+      $(this.element).on(
+        "click.global-notice",
+        ".alert-logs-notice .close",
+        this._boundResetCurrentProp
+      );
     },
 
     @on("willDestroyElement")
     _teardownLogsNotice() {
-      this.$().off("click.global-notice");
+      if (this._boundResetCurrentProp) {
+        $(this.element).off("click.global-notice", this._boundResetCurrentProp);
+      }
+
+      if (this._boundRerenderBuffer) {
+        LogsNotice.current().removeObserver(
+          "hidden",
+          this._boundRerenderBuffer
+        );
+      }
+    },
+
+    _resetCurrentProp() {
+      LogsNotice.currentProp("text", "");
     }
   })
 );

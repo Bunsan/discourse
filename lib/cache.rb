@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Discourse specific cache, enforces 1 day expiry
 
 class Cache < ActiveSupport::Cache::Store
@@ -22,7 +24,7 @@ class Cache < ActiveSupport::Cache::Store
   end
 
   def keys(pattern = "*")
-    redis.keys("#{@namespace}:#{pattern}")
+    redis.scan_each(match: "#{@namespace}:#{pattern}").to_a
   end
 
   def clear
@@ -32,7 +34,7 @@ class Cache < ActiveSupport::Cache::Store
   end
 
   def normalize_key(key, opts = nil)
-    "#{@namespace}:" << key
+    "#{@namespace}:#{key}"
   end
 
   protected

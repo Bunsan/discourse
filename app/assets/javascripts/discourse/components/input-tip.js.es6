@@ -6,15 +6,13 @@ export default Ember.Component.extend(
     classNameBindings: [":tip", "good", "bad"],
     rerenderTriggers: ["validation"],
 
-    bad: Em.computed.alias("validation.failed"),
-    good: Em.computed.not("bad"),
+    bad: Ember.computed.alias("validation.failed"),
+    good: Ember.computed.not("bad"),
 
     buildBuffer(buffer) {
       const reason = this.get("validation.reason");
       if (reason) {
-        buffer.push(
-          iconHTML(this.get("good") ? "check" : "times") + " " + reason
-        );
+        buffer.push(iconHTML(this.good ? "check" : "times") + " " + reason);
       }
     }
   })

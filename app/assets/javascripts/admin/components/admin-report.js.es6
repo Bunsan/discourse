@@ -1,13 +1,9 @@
 import ReportLoader from "discourse/lib/reports-loader";
-import Category from "discourse/models/category";
 import { exportEntity } from "discourse/lib/export-csv";
 import { outputExportResult } from "discourse/lib/export-result";
+import { isNumeric } from "discourse/lib/utilities";
 import { SCHEMA_VERSION, default as Report } from "admin/models/report";
 import computed from "ember-addons/ember-computed-decorators";
-import {
-  registerHoverTooltip,
-  unregisterHoverTooltip
-} from "discourse/lib/tooltip";
 
 const TABLE_OPTIONS = {
   perPage: 8,
@@ -34,6 +30,7 @@ function collapseWeekly(data, average) {
     bucket = bucket || { x: data[i].x, y: 0 };
     bucket.y += data[i].y;
   }
+
   return aggregate;
 }
 
@@ -41,7 +38,7 @@ export default Ember.Component.extend({
   classNameBindings: ["isEnabled", "isLoading", "dasherizedDataSourceName"],
   classNames: ["admin-report"],
   isEnabled: true,
-  disabledLabel: "admin.dashboard.disabled",
+  disabledLabel: I18n.t("admin.dashboard.disabled"),
   isLoading: false,
   rateLimitationString: null,
   dataSourceName: null,
@@ -53,20 +50,15 @@ export default Ember.Component.extend({
   filters: null,
   startDate: null,
   endDate: null,
-  category: null,
-  groupId: null,
   showTrend: false,
   showHeader: true,
   showTitle: true,
   showFilteringUI: false,
-  showCategoryOptions: Ember.computed.alias("model.category_filtering"),
   showDatesOptions: Ember.computed.alias("model.dates_filtering"),
-  showGroupOptions: Ember.computed.alias("model.group_filtering"),
   showExport: Ember.computed.not("model.onlyTable"),
   showRefresh: Ember.computed.or(
-    "showCategoryOptions",
     "showDatesOptions",
-    "showGroupOptions"
+    "model.available_filters.length"
   ),
   shouldDisplayTrend: Ember.computed.and("showTrend", "model.prev_period"),
 
@@ -76,42 +68,25 @@ export default Ember.Component.extend({
     this._reports = [];
   },
 
+  startDate: Ember.computed.reads("filters.startDate"),
+  endDate: Ember.computed.reads("filters.endDate"),
+
   didReceiveAttrs() {
     this._super(...arguments);
 
-    const state = this.get("filters") || {};
-
-    this.setProperties({
-      category: Category.findById(state.categoryId),
-      groupId: state.groupId,
-      startDate: state.startDate,
-      endDate: state.endDate
-    });
-
-    if (this.get("report")) {
-      this._renderReport(
-        this.get("report"),
-        this.get("forcedModes"),
-        this.get("currentMode")
-      );
-    } else if (this.get("dataSourceName")) {
+    if (this.report) {
+      this._renderReport(this.report, this.forcedModes, this.currentMode);
+    } else if (this.dataSourceName) {
       this._fetchReport();
     }
   },
 
-  didRender() {
-    this._super(...arguments);
-
-    registerHoverTooltip($(".info[data-tooltip]"));
-  },
-
-  willDestroyElement() {
-    this._super(...arguments);
-
-    unregisterHoverTooltip($(".info[data-tooltip]"));
-  },
-
-  showError: Ember.computed.or("showTimeoutError", "showExceptionError"),
+  showError: Ember.computed.or(
+    "showTimeoutError",
+    "showExceptionError",
+    "showNotFoundError"
+  ),
+  showNotFoundError: Ember.computed.equal("model.error", "not_found"),
   showTimeoutError: Ember.computed.equal("model.error", "timeout"),
   showExceptionError: Ember.computed.equal("model.error", "exception"),
 
@@ -133,14 +108,12 @@ export default Ember.Component.extend({
     return displayedModesLength > 1;
   },
 
-  categoryId: Ember.computed.alias("category.id"),
-
   @computed("currentMode", "model.modes", "forcedModes")
   displayedModes(currentMode, reportModes, forcedModes) {
     const modes = forcedModes ? forcedModes.split(",") : reportModes;
 
     return Ember.makeArray(modes).map(mode => {
-      const base = `mode-btn ${mode}`;
+      const base = `btn-default mode-btn ${mode}`;
       const cssClass = currentMode === mode ? `${base} is-current` : base;
 
       return {
@@ -149,18 +122,6 @@ export default Ember.Component.extend({
         icon: mode === "table" ? "table" : "signal"
       };
     });
-  },
-
-  @computed()
-  groupOptions() {
-    const arr = [
-      { name: I18n.t("admin.dashboard.reports.groups"), value: "all" }
-    ];
-    return arr.concat(
-      (this.site.groups || []).map(i => {
-        return { name: i["name"], value: i["id"] };
-      })
-    );
   },
 
   @computed("currentMode")
@@ -194,23 +155,25 @@ export default Ember.Component.extend({
 
   @computed(
     "dataSourceName",
-    "categoryId",
-    "groupId",
     "normalizedStartDate",
-    "normalizedEndDate"
+    "normalizedEndDate",
+    "filters.customFilters"
   )
-  reportKey(dataSourceName, categoryId, groupId, startDate, endDate) {
+  reportKey(dataSourceName, startDate, endDate, customFilters) {
     if (!dataSourceName || !startDate || !endDate) return null;
 
     let reportKey = "reports:";
     reportKey += [
       dataSourceName,
-      categoryId,
       startDate.replace(/-/g, ""),
       endDate.replace(/-/g, ""),
-      groupId,
       "[:prev_period]",
       this.get("reportOptions.table.limit"),
+      customFilters
+        ? JSON.stringify(customFilters, (key, value) =>
+            isNumeric(value) ? value.toString() : value
+          )
+        : null,
       SCHEMA_VERSION
     ]
       .filter(x => x)
@@ -221,24 +184,41 @@ export default Ember.Component.extend({
   },
 
   actions: {
+    applyFilter(id, value) {
+      let customFilters = this.get("filters.customFilters") || {};
+
+      if (typeof value === "undefined") {
+        delete customFilters[id];
+      } else {
+        customFilters[id] = value;
+      }
+
+      this.attrs.onRefresh({
+        type: this.get("model.type"),
+        startDate: this.startDate,
+        endDate: this.endDate,
+        filters: customFilters
+      });
+    },
+
     refreshReport() {
       this.attrs.onRefresh({
-        categoryId: this.get("categoryId"),
-        groupId: this.get("groupId"),
-        startDate: this.get("startDate"),
-        endDate: this.get("endDate")
+        type: this.get("model.type"),
+        startDate: this.startDate,
+        endDate: this.endDate,
+        filters: this.get("filters.customFilters")
       });
     },
 
     exportCsv() {
+      const customFilters = this.get("filters.customFilters") || {};
+
       exportEntity("report", {
         name: this.get("model.type"),
-        start_date: this.get("startDate"),
-        end_date: this.get("endDate"),
-        category_id:
-          this.get("categoryId") === "all" ? undefined : this.get("categoryId"),
-        group_id:
-          this.get("groupId") === "all" ? undefined : this.get("groupId")
+        start_date: this.startDate,
+        end_date: this.endDate,
+        category_id: customFilters.category,
+        group_id: customFilters.group
       }).then(outputExportResult);
     },
 
@@ -265,16 +245,16 @@ export default Ember.Component.extend({
 
     const sort = r => {
       if (r.length > 1) {
-        return r.findBy("type", this.get("dataSourceName"));
+        return r.findBy("type", this.dataSourceName);
       } else {
         return r;
       }
     };
 
-    if (!this.get("startDate") || !this.get("endDate")) {
+    if (!this.startDate || !this.endDate) {
       report = sort(filteredReports)[0];
     } else {
-      let reportKey = this.get("reportKey");
+      const reportKey = this.reportKey;
 
       report = sort(
         filteredReports.filter(r => r.report_key.includes(reportKey))
@@ -283,11 +263,11 @@ export default Ember.Component.extend({
       if (!report) return;
     }
 
-    this._renderReport(
-      report,
-      this.get("forcedModes"),
-      this.get("currentMode")
-    );
+    if (report.error === "not_found") {
+      this.set("showFilteringUI", false);
+    }
+
+    this._renderReport(report, this.forcedModes, this.currentMode);
   },
 
   _renderReport(report, forcedModes, currentMode) {
@@ -302,7 +282,7 @@ export default Ember.Component.extend({
   },
 
   _fetchReport() {
-    this._super();
+    this._super(...arguments);
 
     this.setProperties({ isLoading: true, rateLimitationString: null });
 
@@ -329,35 +309,31 @@ export default Ember.Component.extend({
         }
       };
 
-      ReportLoader.enqueue(this.get("dataSourceName"), payload.data, callback);
+      ReportLoader.enqueue(this.dataSourceName, payload.data, callback);
     });
   },
 
   _buildPayload(facets) {
     let payload = { data: { cache: true, facets } };
 
-    if (this.get("startDate")) {
+    if (this.startDate) {
       payload.data.start_date = moment
-        .utc(this.get("startDate"), "YYYY-MM-DD")
+        .utc(this.startDate, "YYYY-MM-DD")
         .toISOString();
     }
 
-    if (this.get("endDate")) {
+    if (this.endDate) {
       payload.data.end_date = moment
-        .utc(this.get("endDate"), "YYYY-MM-DD")
+        .utc(this.endDate, "YYYY-MM-DD")
         .toISOString();
-    }
-
-    if (this.get("groupId") && this.get("groupId") !== "all") {
-      payload.data.group_id = this.get("groupId");
-    }
-
-    if (this.get("categoryId") && this.get("categoryId") !== "all") {
-      payload.data.category_id = this.get("categoryId");
     }
 
     if (this.get("reportOptions.table.limit")) {
       payload.data.limit = this.get("reportOptions.table.limit");
+    }
+
+    if (this.get("filters.customFilters")) {
+      payload.data.filters = this.get("filters.customFilters");
     }
 
     return payload;
@@ -380,7 +356,20 @@ export default Ember.Component.extend({
   _loadReport(jsonReport) {
     Report.fillMissingDates(jsonReport, { filledField: "chartData" });
 
-    if (jsonReport.chartData && jsonReport.chartData.length > 40) {
+    if (jsonReport.chartData && jsonReport.modes[0] === "stacked_chart") {
+      jsonReport.chartData = jsonReport.chartData.map(chartData => {
+        if (chartData.length > 40) {
+          return {
+            data: collapseWeekly(chartData.data),
+            req: chartData.req,
+            label: chartData.label,
+            color: chartData.color
+          };
+        } else {
+          return chartData;
+        }
+      });
+    } else if (jsonReport.chartData && jsonReport.chartData.length > 40) {
       jsonReport.chartData = collapseWeekly(
         jsonReport.chartData,
         jsonReport.average
@@ -391,8 +380,8 @@ export default Ember.Component.extend({
       Report.fillMissingDates(jsonReport, {
         filledField: "prevChartData",
         dataField: "prev_data",
-        starDate: jsonReport.prev_start_date,
-        endDate: jsonReport.prev_end_date
+        starDate: jsonReport.prev_startDate,
+        endDate: jsonReport.prev_endDate
       });
 
       if (jsonReport.prevChartData && jsonReport.prevChartData.length > 40) {

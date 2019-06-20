@@ -23,8 +23,6 @@ ar:
         many: "العديد من الأصوات"
         other: "مجموع الأصوات"
       average_rating: "متوسط التقييمات: <strong>%{average}</strong> "
-      public:
-        title: "الأصوات تظهر للعموم."
       multiple:
         help:
           at_least_min_options:
@@ -81,6 +79,8 @@ ar:
           regular: اختيار من متعدد
           multiple: عدّة خيارات
           number: تقييم عددي
+        poll_result:
+          label: 'نتائج '
         poll_config:
           max: الحد الأقصى
           min: الحد الأدنى

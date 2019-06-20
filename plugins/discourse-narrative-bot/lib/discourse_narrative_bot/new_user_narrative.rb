@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'distributed_mutex'
 
 module DiscourseNarrativeBot
@@ -302,7 +304,6 @@ module DiscourseNarrativeBot
       post_topic_id = @post.topic_id
       return unless valid_topic?(post_topic_id)
 
-      @post.post_analyzer.cook(@post.raw, {})
       transition = true
       attempted_count = get_state_data(:attempted) || 0
 
@@ -313,7 +314,9 @@ module DiscourseNarrativeBot
         @data[:skip_attempted] = false
       end
 
-      if @post.post_analyzer.image_count > 0
+      cooked = @post.post_analyzer.cook(@post.raw, {})
+
+      if Nokogiri::HTML.fragment(cooked).css("img").size > 0
         set_state_data(:post_id, @post.id)
 
         if get_state_data(:liked)
@@ -522,7 +525,7 @@ module DiscourseNarrativeBot
     end
 
     def like_post(post)
-      PostAction.act(self.discobot_user, post, PostActionType.types[:like])
+      PostActionCreator.like(self.discobot_user, post)
     end
 
     def welcome_topic
@@ -531,7 +534,10 @@ module DiscourseNarrativeBot
     end
 
     def url_helpers(url, opts = {})
-      Rails.application.routes.url_helpers.send(url, opts.merge(host: Discourse.base_url))
+      Rails.application.routes.url_helpers.public_send(
+        url,
+        opts.merge(host: Discourse.base_url)
+      )
     end
   end
 end

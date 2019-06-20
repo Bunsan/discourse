@@ -7,23 +7,23 @@ export default Ember.Controller.extend({
 
   loading: false,
 
-  category: Em.computed.alias("navigationCategory.category"),
-  noSubcategories: Em.computed.alias("navigationCategory.noSubcategories"),
+  category: Ember.computed.alias("navigationCategory.category"),
+  noSubcategories: Ember.computed.alias("navigationCategory.noSubcategories"),
 
-  loadedAllItems: Em.computed.not("discoveryTopics.model.canLoadMore"),
+  loadedAllItems: Ember.computed.not("discoveryTopics.model.canLoadMore"),
 
   _showFooter: function() {
-    this.set("application.showFooter", this.get("loadedAllItems"));
+    this.set("application.showFooter", this.loadedAllItems);
   }.observes("loadedAllItems"),
 
   showMoreUrl(period) {
     let url = "",
-      category = this.get("category");
+      category = this.category;
     if (category) {
       url =
         "/c/" +
         Discourse.Category.slugFor(category) +
-        (this.get("noSubcategories") ? "/none" : "") +
+        (this.noSubcategories ? "/none" : "") +
         "/l";
     }
     url += "/top/" + period;

@@ -1,3 +1,4 @@
+import debounce from "discourse/lib/debounce";
 import { selectedText } from "discourse/lib/utilities";
 
 export default Ember.Component.extend({
@@ -9,16 +10,16 @@ export default Ember.Component.extend({
   _reselected: false,
 
   _hideButton() {
-    this.get("quoteState").clear();
+    this.quoteState.clear();
     this.set("visible", false);
   },
 
   _selectionChanged() {
-    const quoteState = this.get("quoteState");
+    const quoteState = this.quoteState;
 
     const selection = window.getSelection();
     if (selection.isCollapsed) {
-      if (this.get("visible")) {
+      if (this.visible) {
         this._hideButton();
       }
       return;
@@ -38,7 +39,7 @@ export default Ember.Component.extend({
       postId = postId || $ancestor.closest(".boxed, .reply").data("post-id");
 
       if ($ancestor.closest(".contents").length === 0 || !postId) {
-        if (this.get("visible")) {
+        if (this.visible) {
           this._hideButton();
         }
         return;
@@ -60,7 +61,7 @@ export default Ember.Component.extend({
     // on Desktop, shows the button at the beginning of the selection
     // on Mobile, shows the button at the end of the selection
     const isMobileDevice = this.site.isMobileDevice;
-    const { isIOS, isAndroid, isSafari, isOpera } = this.capabilities;
+    const { isIOS, isAndroid, isSafari, isOpera, isIE11 } = this.capabilities;
     const showAtEnd = isMobileDevice || isIOS || isAndroid || isOpera;
 
     // Don't mess with the original range as it results in weird behaviours
@@ -88,7 +89,10 @@ export default Ember.Component.extend({
     const parent = markerElement.parentNode;
     parent.removeChild(markerElement);
     // merge back all text nodes so they don't get messed up
-    parent.normalize();
+    if (!isIE11) {
+      // Skip this fix in IE11 - .normalize causes the selection to change
+      parent.normalize();
+    }
 
     // work around Safari that would sometimes lose the selection
     if (isSafari) {
@@ -119,7 +123,7 @@ export default Ember.Component.extend({
   didInsertElement() {
     const { isWinphone, isAndroid } = this.capabilities;
     const wait = isWinphone || isAndroid ? 250 : 25;
-    const onSelectionChanged = _.debounce(() => this._selectionChanged(), wait);
+    const onSelectionChanged = debounce(() => this._selectionChanged(), wait);
 
     $(document)
       .on("mousedown.quote-button", e => {
@@ -153,7 +157,7 @@ export default Ember.Component.extend({
   },
 
   click() {
-    const { postId, buffer } = this.get("quoteState");
+    const { postId, buffer } = this.quoteState;
     this.attrs.selectText(postId, buffer).then(() => this._hideButton());
     return false;
   }

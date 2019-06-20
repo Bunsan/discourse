@@ -52,34 +52,7 @@ export function buildButton(name, widget) {
   }
 }
 
-registerButton("like", attrs => {
-  if (!attrs.showLike) {
-    return;
-  }
-
-  const className = attrs.liked
-    ? "toggle-like has-like fade-out"
-    : "toggle-like like";
-
-  const button = {
-    action: "like",
-    icon: attrs.liked ? "d-liked" : "d-unliked",
-    className
-  };
-
-  if (attrs.canToggleLike) {
-    button.title = attrs.liked
-      ? "post.controls.undo_like"
-      : "post.controls.like";
-  } else if (attrs.liked) {
-    button.title = "post.controls.has_liked";
-    button.disabled = true;
-  }
-
-  return button;
-});
-
-registerButton("like-count", attrs => {
+function likeCount(attrs) {
   const count = attrs.likeCount;
 
   if (count > 0) {
@@ -94,23 +67,75 @@ registerButton("like-count", attrs => {
     return {
       action: "toggleWhoLiked",
       title,
-      className: `like-count highlight-action ${additionalClass}`,
+      className: `button-count like-count highlight-action ${additionalClass}`,
       contents: count,
       icon,
       iconRight: true,
+      addContainer: attrs.yours,
       titleOptions: { count: attrs.liked ? count - 1 : count }
     };
   }
+}
+
+registerButton("like-count", likeCount);
+
+registerButton("like", attrs => {
+  if (!attrs.showLike) {
+    return likeCount(attrs);
+  }
+
+  const className = attrs.liked
+    ? "toggle-like has-like fade-out"
+    : "toggle-like like";
+
+  const button = {
+    action: "like",
+    icon: attrs.liked ? "d-liked" : "d-unliked",
+    className,
+    before: "like-count"
+  };
+
+  // If the user has already liked the post and doesn't have permission
+  // to undo that operation, then indicate via the title that they've liked it
+  // and disable the button. Otherwise, set the title even if the user
+  // is anonymous (meaning they don't currently have permission to like);
+  // this is important for accessibility.
+  if (attrs.liked && !attrs.canToggleLike) {
+    button.title = "post.controls.has_liked";
+    button.disabled = true;
+  } else {
+    button.title = attrs.liked
+      ? "post.controls.undo_like"
+      : "post.controls.like";
+  }
+
+  return button;
+});
+
+registerButton("flag-count", attrs => {
+  let className = "button-count";
+  if (attrs.reviewableScorePendingCount > 0) {
+    className += " has-pending";
+  }
+  return {
+    className,
+    contents: h("span", attrs.reviewableScoreCount.toString()),
+    url: `/review/${attrs.reviewableId}`
+  };
 });
 
 registerButton("flag", attrs => {
-  if (attrs.canFlag) {
-    return {
+  if (attrs.reviewableId || (attrs.canFlag && !attrs.hidden)) {
+    let button = {
       action: "showFlags",
       title: "post.controls.flag",
       icon: "flag",
       className: "create-flag"
     };
+    if (attrs.reviewableId) {
+      button.before = "flag-count";
+    }
+    return button;
   }
 });
 
@@ -120,7 +145,7 @@ registerButton("edit", attrs => {
       action: "editPost",
       className: "edit",
       title: "post.controls.edit",
-      icon: "pencil",
+      icon: "pencil-alt",
       alwaysShowYours: true
     };
   }
@@ -262,8 +287,8 @@ registerButton("delete", attrs => {
     return {
       id: "delete_topic",
       action: "deletePost",
-      title: "topic.actions.delete",
-      icon: "trash-o",
+      title: "post.controls.delete_topic",
+      icon: "far-trash-alt",
       className: "delete"
     };
   } else if (attrs.canRecover) {
@@ -279,15 +304,15 @@ registerButton("delete", attrs => {
       id: "delete",
       action: "deletePost",
       title: "post.controls.delete",
-      icon: "trash-o",
+      icon: "far-trash-alt",
       className: "delete"
     };
-  } else if (!attrs.canDelete && attrs.firstPost && attrs.yours) {
+  } else if (attrs.showFlagDelete) {
     return {
       id: "delete_topic",
       action: "showDeleteTopicModal",
       title: "post.controls.delete_topic_disallowed",
-      icon: "trash-o",
+      icon: "far-trash-alt",
       className: "delete"
     };
   }
@@ -318,7 +343,15 @@ export default createWidget("post-menu", {
   attachButton(name) {
     let buttonAtts = buildButton(name, this);
     if (buttonAtts) {
-      return this.attach(this.settings.buttonType, buttonAtts);
+      let button = this.attach(this.settings.buttonType, buttonAtts);
+      if (buttonAtts.before) {
+        let before = this.attachButton(buttonAtts.before);
+        return h("div.double-button", [before, button]);
+      } else if (buttonAtts.addContainer) {
+        return h("div.double-button", [button]);
+      }
+
+      return button;
     }
   },
 
@@ -354,22 +387,21 @@ export default createWidget("post-menu", {
       replaceButton(orderedButtons, "reply", "wiki-edit");
     }
 
-    orderedButtons
-      .filter(x => x !== "like-count" && x !== "like")
-      .forEach(i => {
-        const button = this.attachButton(i, attrs);
+    orderedButtons.forEach(i => {
+      const button = this.attachButton(i, attrs);
 
-        if (button) {
-          allButtons.push(button);
+      if (button) {
+        allButtons.push(button);
 
-          if (
-            (attrs.yours && button.attrs.alwaysShowYours) ||
-            hiddenButtons.indexOf(i) === -1
-          ) {
-            visibleButtons.push(button);
-          }
+        if (
+          (attrs.yours && button.attrs && button.attrs.alwaysShowYours) ||
+          (attrs.reviewableId && i === "flag") ||
+          hiddenButtons.indexOf(i) === -1
+        ) {
+          visibleButtons.push(button);
         }
-      });
+      }
+    });
 
     if (!this.settings.collapseButtons) {
       visibleButtons = allButtons;
@@ -392,26 +424,24 @@ export default createWidget("post-menu", {
       visibleButtons.splice(visibleButtons.length - 1, 0, showMore);
     }
 
-    visibleButtons.unshift(
-      h("div.like-button", [
-        this.attachButton("like-count", attrs),
-        this.attachButton("like", attrs)
-      ])
-    );
-
-    Object.keys(_extraButtons).forEach(k => {
-      const builder = _extraButtons[k];
+    Object.values(_extraButtons).forEach(builder => {
       if (builder) {
         const buttonAtts = builder(attrs, this.state, this.siteSettings);
         if (buttonAtts) {
-          const { position, beforeButton } = buttonAtts;
+          const { position, beforeButton, afterButton } = buttonAtts;
           delete buttonAtts.position;
 
           let button = this.attach(this.settings.buttonType, buttonAtts);
 
+          const content = [];
           if (beforeButton) {
-            button = h("span", [beforeButton(h), button]);
+            content.push(beforeButton(h));
           }
+          content.push(button);
+          if (afterButton) {
+            content.push(afterButton(h));
+          }
+          button = h("span", content);
 
           if (button) {
             switch (position) {

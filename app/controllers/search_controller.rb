@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'search'
 
 class SearchController < ApplicationController
@@ -9,6 +11,19 @@ class SearchController < ApplicationController
   end
 
   def show
+    @search_term = params.permit(:q)[:q]
+
+    # a q param has been given but it's not in the correct format
+    # eg: ?q[foo]=bar
+    if params[:q].present? && !@search_term.present?
+      raise Discourse::InvalidParameters.new(:q)
+    end
+
+    if @search_term.present? &&
+       @search_term.length < SiteSetting.min_search_term_length
+      raise Discourse::InvalidParameters.new(:q)
+    end
+
     search_args = {
       type_filter: 'topic',
       guardian: guardian,
@@ -29,7 +44,6 @@ class SearchController < ApplicationController
     search_args[:ip_address] = request.remote_ip
     search_args[:user_id] = current_user.id if current_user.present?
 
-    @search_term = params[:q]
     search = Search.new(@search_term, search_args)
     result = search.execute
 
@@ -66,6 +80,7 @@ class SearchController < ApplicationController
     search_args[:search_type] = :header
     search_args[:ip_address] = request.remote_ip
     search_args[:user_id] = current_user.id if current_user.present?
+    search_args[:restrict_to_archetype] = params[:restrict_to_archetype] if params[:restrict_to_archetype].present?
 
     search = Search.new(params[:term], search_args)
     result = search.execute

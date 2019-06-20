@@ -2,21 +2,23 @@ import { observes } from "ember-addons/ember-computed-decorators";
 
 export default Ember.Component.extend({
   init() {
-    this._super();
+    this._super(...arguments);
 
-    const connector = this.get("connector");
+    const connector = this.connector;
     this.set("layoutName", connector.templateName);
 
-    const args = this.get("args") || {};
+    const args = this.args || {};
     Object.keys(args).forEach(key => this.set(key, args[key]));
 
     const connectorClass = this.get("connector.connectorClass");
     connectorClass.setupComponent.call(this, args, this);
+
+    this.set("actions", connectorClass.actions);
   },
 
   @observes("args")
   _argsChanged() {
-    const args = this.get("args") || {};
+    const args = this.args || {};
     Object.keys(args).forEach(key => this.set(key, args[key]));
   },
 

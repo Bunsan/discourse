@@ -1,4 +1,5 @@
 import Composer from "discourse/models/composer";
+import { getOwner } from "discourse-common/lib/get-owner";
 
 const DiscourseRoute = Ember.Route.extend({
   showFooter: false,
@@ -8,18 +9,19 @@ const DiscourseRoute = Ember.Route.extend({
   resfreshQueryWithoutTransition: false,
 
   activate() {
-    this._super();
-    if (this.get("showFooter")) {
+    this._super(...arguments);
+    if (this.showFooter) {
       this.controllerFor("application").set("showFooter", true);
     }
   },
 
   refresh() {
     if (!this.refreshQueryWithoutTransition) {
-      return this._super();
+      return this._super(...arguments);
     }
 
-    if (!this.router._routerMicrolib.activeTransition) {
+    const router = getOwner(this).lookup("router:main");
+    if (!router._routerMicrolib.activeTransition) {
       const controller = this.controller,
         model = controller.get("model"),
         params = this.controller.getProperties(Object.keys(this.queryParams));

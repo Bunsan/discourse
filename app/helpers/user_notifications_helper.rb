@@ -1,8 +1,11 @@
+# frozen_string_literal: true
+
 module UserNotificationsHelper
+  include GlobalPath
 
   def indent(text, by = 2)
     spacer = " " * by
-    result = ""
+    result = +""
     text.each_line do |line|
       result << spacer << line
     end
@@ -18,13 +21,9 @@ module UserNotificationsHelper
   end
 
   def logo_url
-    logo_url = SiteSetting.digest_logo_url
-    logo_url = SiteSetting.logo_url if logo_url.blank? || logo_url =~ /\.svg$/i
-
+    logo_url = SiteSetting.site_digest_logo_url
+    logo_url = SiteSetting.site_logo_url if logo_url.blank? || logo_url =~ /\.svg$/i
     return nil if logo_url.blank? || logo_url =~ /\.svg$/i
-    if logo_url !~ /http(s)?\:\/\//
-      logo_url = "#{Discourse.base_url}#{logo_url}"
-    end
     logo_url
   end
 
@@ -35,7 +34,7 @@ module UserNotificationsHelper
   def first_paragraphs_from(html)
     doc = Nokogiri::HTML(html)
 
-    result = ""
+    result = +""
     length = 0
 
     doc.css('body > p, aside.onebox, body > ul, body > blockquote').each do |node|
@@ -52,9 +51,9 @@ module UserNotificationsHelper
     doc.css('div').first
   end
 
-  def email_excerpt(html_arg)
+  def email_excerpt(html_arg, post = nil)
     html = (first_paragraphs_from(html_arg) || html_arg).to_s
-    PrettyText.format_for_email(html).html_safe
+    PrettyText.format_for_email(html, post).html_safe
   end
 
   def normalize_name(name)

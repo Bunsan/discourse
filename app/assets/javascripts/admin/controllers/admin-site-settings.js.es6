@@ -2,20 +2,24 @@ import debounce from "discourse/lib/debounce";
 
 export default Ember.Controller.extend({
   filter: null,
+  allSiteSettings: Ember.computed.alias("model"),
+  visibleSiteSettings: null,
   onlyOverridden: false,
 
   filterContentNow(category) {
     // If we have no content, don't bother filtering anything
-    if (!!Ember.isEmpty(this.get("allSiteSettings"))) return;
+    if (!!Ember.isEmpty(this.allSiteSettings)) return;
 
     let filter;
-    if (this.get("filter")) {
-      filter = this.get("filter").toLowerCase();
+    if (this.filter) {
+      filter = this.filter.toLowerCase().trim();
     }
 
-    if ((!filter || 0 === filter.length) && !this.get("onlyOverridden")) {
-      this.set("model", this.get("allSiteSettings"));
-      this.transitionToRoute("adminSiteSettings");
+    if ((!filter || 0 === filter.length) && !this.onlyOverridden) {
+      this.set("visibleSiteSettings", this.allSiteSettings);
+      if (this.categoryNameKey === "all_results") {
+        this.transitionToRoute("adminSiteSettings");
+      }
       return;
     }
 
@@ -27,9 +31,9 @@ export default Ember.Controller.extend({
     const matchesGroupedByCategory = [all];
 
     const matches = [];
-    this.get("allSiteSettings").forEach(settingsCategory => {
+    this.allSiteSettings.forEach(settingsCategory => {
       const siteSettings = settingsCategory.siteSettings.filter(item => {
-        if (this.get("onlyOverridden") && !item.get("overridden")) return false;
+        if (this.onlyOverridden && !item.get("overridden")) return false;
         if (filter) {
           const setting = item.get("setting").toLowerCase();
           return (
@@ -62,7 +66,7 @@ export default Ember.Controller.extend({
     all.hasMore = matches.length > 30;
     all.count = all.hasMore ? "30+" : matches.length;
 
-    this.set("model", matchesGroupedByCategory);
+    this.set("visibleSiteSettings", matchesGroupedByCategory);
     this.transitionToRoute(
       "adminSiteSettingsCategory",
       category || "all_results"
@@ -70,12 +74,12 @@ export default Ember.Controller.extend({
   },
 
   filterContent: debounce(function() {
-    if (this.get("_skipBounce")) {
+    if (this._skipBounce) {
       this.set("_skipBounce", false);
     } else {
       this.filterContentNow();
     }
-  }, 250).observes("filter", "onlyOverridden"),
+  }, 250).observes("filter", "onlyOverridden", "model"),
 
   actions: {
     clearFilter() {

@@ -9,8 +9,12 @@ export default Ember.Controller.extend({
   numberPollType: "number",
   multiplePollType: "multiple",
 
+  alwaysPollResult: "always",
+  votePollResult: "on_vote",
+  closedPollResult: "on_close",
+
   init() {
-    this._super();
+    this._super(...arguments);
     this._setupPoll();
   },
 
@@ -28,6 +32,24 @@ export default Ember.Controller.extend({
       {
         name: I18n.t("poll.ui_builder.poll_type.multiple"),
         value: multiplePollType
+      }
+    ];
+  },
+
+  @computed("alwaysPollResult", "votePollResult", "closedPollResult")
+  pollResults(alwaysPollResult, votePollResult, closedPollResult) {
+    return [
+      {
+        name: I18n.t("poll.ui_builder.poll_result.always"),
+        value: alwaysPollResult
+      },
+      {
+        name: I18n.t("poll.ui_builder.poll_result.vote"),
+        value: votePollResult
+      },
+      {
+        name: I18n.t("poll.ui_builder.poll_result.closed"),
+        value: closedPollResult
       }
     ];
   },
@@ -67,12 +89,12 @@ export default Ember.Controller.extend({
 
   @observes("isMultiple", "isNumber", "pollOptionsCount")
   _setPollMax() {
-    const isMultiple = this.get("isMultiple");
-    const isNumber = this.get("isNumber");
+    const isMultiple = this.isMultiple;
+    const isNumber = this.isNumber;
     if (!isMultiple && !isNumber) return;
 
     if (isMultiple) {
-      this.set("pollMax", this.get("pollOptionsCount"));
+      this.set("pollMax", this.pollOptionsCount);
     } else if (isNumber) {
       this.set("pollMax", this.siteSettings.poll_maximum_options);
     }
@@ -128,6 +150,7 @@ export default Ember.Controller.extend({
     "isNumber",
     "showMinMax",
     "pollType",
+    "pollResult",
     "publicPoll",
     "pollOptions",
     "pollMin",
@@ -141,6 +164,7 @@ export default Ember.Controller.extend({
     isNumber,
     showMinMax,
     pollType,
+    pollResult,
     publicPoll,
     pollOptions,
     pollMin,
@@ -153,7 +177,7 @@ export default Ember.Controller.extend({
     let pollHeader = "[poll";
     let output = "";
 
-    const match = this.get("toolbarEvent")
+    const match = this.toolbarEvent
       .getText()
       .match(/\[poll(\s+name=[^\s\]]+)*.*\]/gim);
 
@@ -167,6 +191,7 @@ export default Ember.Controller.extend({
     }
 
     if (pollType) pollHeader += ` type=${pollType}`;
+    if (pollResult) pollHeader += ` results=${pollResult}`;
     if (pollMin && showMinMax) pollHeader += ` min=${pollMin}`;
     if (pollMax) pollHeader += ` max=${pollMax}`;
     if (isNumber) pollHeader += ` step=${step}`;
@@ -276,7 +301,7 @@ export default Ember.Controller.extend({
 
   actions: {
     insertPoll() {
-      this.get("toolbarEvent").addText(this.get("pollOutput"));
+      this.toolbarEvent.addText(this.pollOutput);
       this.send("closeModal");
       this._setupPoll();
     }

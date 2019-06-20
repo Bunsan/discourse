@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'badge_queries'
 
 BadgeGrouping.seed do |g|
@@ -55,7 +57,7 @@ SQL
     b.default_badge_grouping_id = BadgeGrouping::TrustLevel
     b.trigger = Badge::Trigger::TrustLevelChange
     # allow title for tl3 and above
-    b.default_allow_title = id > 2
+    b.default_allow_title = id > Badge::Member
     b.default_icon = "fa-user"
     b.system = true
   end
@@ -134,7 +136,6 @@ Badge.seed do |b|
   b.target_posts = true
   b.show_posts = false
   b.query = BadgeQueries::FirstFlag
-  b.badge_grouping_id = BadgeGrouping::GettingStarted
   b.default_badge_grouping_id = BadgeGrouping::GettingStarted
   b.trigger = Badge::Trigger::PostAction
   b.auto_revoke = false
@@ -227,7 +228,6 @@ Badge.seed do |b|
   b.badge_type_id = BadgeType::Bronze
   b.multiple_grant = false
   b.query = BadgeQueries::Editor
-  b.badge_grouping_id = BadgeGrouping::GettingStarted
   b.default_badge_grouping_id = BadgeGrouping::GettingStarted
   b.trigger = Badge::Trigger::PostRevision
   b.system = true
@@ -240,7 +240,6 @@ Badge.seed do |b|
   b.multiple_grant = false
   b.target_posts = true
   b.query = BadgeQueries::WikiEditor
-  b.badge_grouping_id = BadgeGrouping::GettingStarted
   b.default_badge_grouping_id = BadgeGrouping::GettingStarted
   b.trigger = Badge::Trigger::PostRevision
   b.system = true
@@ -294,7 +293,6 @@ end
     b.target_posts = true
     b.show_posts = true
     b.query = BadgeQueries.linking_badge(count)
-    b.badge_grouping_id = BadgeGrouping::Posting
     b.default_badge_grouping_id = BadgeGrouping::Posting
     # don't trigger for now, its too expensive
     b.trigger = Badge::Trigger::None
@@ -331,7 +329,6 @@ end
     b.default_icon = "fa-heart"
     b.badge_type_id = level
     b.query = BadgeQueries.liked_back(count, ratio)
-    b.badge_grouping_id = BadgeGrouping::Community
     b.default_badge_grouping_id = BadgeGrouping::Community
     b.trigger = Badge::Trigger::None
     b.auto_revoke = false
@@ -350,7 +347,6 @@ end
     b.default_icon = "fa-heart"
     b.badge_type_id = level
     b.query = BadgeQueries.like_rate_limit(count)
-    b.badge_grouping_id = BadgeGrouping::Community
     b.default_badge_grouping_id = BadgeGrouping::Community
     b.trigger = Badge::Trigger::None
     b.auto_revoke = false
@@ -366,7 +362,6 @@ Badge.seed do |b|
   b.target_posts = true
   b.show_posts = true
   b.query = BadgeQueries::FirstMention
-  b.badge_grouping_id = BadgeGrouping::GettingStarted
   b.default_badge_grouping_id = BadgeGrouping::GettingStarted
   b.trigger = Badge::Trigger::PostRevision
   b.system = true
@@ -380,7 +375,6 @@ Badge.seed do |b|
   b.target_posts = true
   b.show_posts = true
   b.query = nil
-  b.badge_grouping_id = BadgeGrouping::GettingStarted
   b.default_badge_grouping_id = BadgeGrouping::GettingStarted
   b.trigger = Badge::Trigger::None
   b.system = true
@@ -394,7 +388,6 @@ Badge.seed do |b|
   b.target_posts = true
   b.show_posts = true
   b.query = nil
-  b.badge_grouping_id = BadgeGrouping::GettingStarted
   b.default_badge_grouping_id = BadgeGrouping::GettingStarted
   b.trigger = Badge::Trigger::None
   b.system = true
@@ -408,7 +401,6 @@ Badge.seed do |b|
   b.target_posts = true
   b.show_posts = true
   b.query = nil
-  b.badge_grouping_id = BadgeGrouping::GettingStarted
   b.default_badge_grouping_id = BadgeGrouping::GettingStarted
   b.trigger = Badge::Trigger::None
   b.system = true
@@ -422,7 +414,6 @@ Badge.seed do |b|
   b.target_posts = false
   b.show_posts = false
   b.query = nil
-  b.badge_grouping_id = BadgeGrouping::GettingStarted
   b.default_badge_grouping_id = BadgeGrouping::GettingStarted
   b.trigger = Badge::Trigger::None
   b.system = true
@@ -439,7 +430,6 @@ end
     b.default_icon = "fa-eye"
     b.badge_type_id = level
     b.query = BadgeQueries.consecutive_visits(days)
-    b.badge_grouping_id = BadgeGrouping::Community
     b.default_badge_grouping_id = BadgeGrouping::Community
     b.trigger = Badge::Trigger::None
     b.auto_revoke = false

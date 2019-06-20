@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class SingleSignOnRecord < ActiveRecord::Base
   belongs_to :user
 
@@ -24,4 +26,5 @@ end
 # Indexes
 #
 #  index_single_sign_on_records_on_external_id  (external_id) UNIQUE
+#  index_single_sign_on_records_on_user_id      (user_id)
 #

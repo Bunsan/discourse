@@ -5,6 +5,7 @@ import { defaultHomepage } from "discourse/lib/utilities";
 import TopicList from "discourse/models/topic-list";
 import { ajax } from "discourse/lib/ajax";
 import PreloadStore from "preload-store";
+import { searchPriorities } from "discourse/components/concerns/category-search-priorities";
 
 const DiscoveryCategoriesRoute = Discourse.Route.extend(OpenComposer, {
   renderTemplate() {
@@ -94,24 +95,8 @@ const DiscoveryCategoriesRoute = Discourse.Route.extend(OpenComposer, {
   },
 
   actions: {
-    refresh() {
-      const controller = this.controllerFor("discovery/categories");
-      const discController = this.controllerFor("discovery");
-
-      // Don't refresh if we're still loading
-      if (!discController || discController.get("loading")) {
-        return;
-      }
-
-      // If we `send('loading')` here, due to returning true it bubbles up to the
-      // router and ember throws an error due to missing `handlerInfos`.
-      // Lesson learned: Don't call `loading` yourself.
-      discController.set("loading", true);
-
-      this.model().then(model => {
-        this.setupController(controller, model);
-        controller.send("loadingComplete");
-      });
+    triggerRefresh() {
+      this.refresh();
     },
 
     createCategory() {
@@ -125,7 +110,8 @@ const DiscoveryCategoriesRoute = Discourse.Route.extend(OpenComposer, {
         available_groups: groups.map(g => g.name),
         allow_badges: true,
         topic_featured_link_allowed: true,
-        custom_fields: {}
+        custom_fields: {},
+        search_priority: searchPriorities.normal
       });
 
       showModal("edit-category", { model });

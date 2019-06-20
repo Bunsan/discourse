@@ -12,20 +12,12 @@ export default Ember.Component.extend({
 
   @computed
   buttons() {
-    return findAll(
-      this.siteSettings,
-      this.capabilities,
-      this.site.isMobileDevice
-    );
+    return findAll();
   },
 
   actions: {
-    emailLogin() {
-      this.sendAction("emailLogin");
-    },
-
     externalLogin(provider) {
-      this.sendAction("externalLogin", provider);
+      this.externalLogin(provider);
     }
   }
 });

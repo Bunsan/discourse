@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe BadgeGranter do
 
-  let(:badge) { Fabricate(:badge) }
-  let(:user) { Fabricate(:user) }
+  fab!(:badge) { Fabricate(:badge) }
+  fab!(:user) { Fabricate(:user) }
 
   describe 'revoke_titles' do
     it 'can correctly revoke titles' do
@@ -58,7 +60,7 @@ describe BadgeGranter do
     it 'can backfill the welcome badge' do
       post = Fabricate(:post)
       user2 = Fabricate(:user)
-      PostAction.act(user2, post, PostActionType.types[:like])
+      PostActionCreator.like(user2, post)
 
       UserBadge.destroy_all
       BadgeGranter.backfill(Badge.find(Badge::Welcome))
@@ -74,31 +76,30 @@ describe BadgeGranter do
     end
 
     it 'should grant missing badges' do
+      nice_topic = Badge.find(Badge::NiceTopic)
       good_topic = Badge.find(Badge::GoodTopic)
 
       post = Fabricate(:post, like_count: 30)
+
       2.times {
-        BadgeGranter.backfill(Badge.find(Badge::NiceTopic), post_ids: [post.id])
+        BadgeGranter.backfill(nice_topic, post_ids: [post.id])
         BadgeGranter.backfill(good_topic)
       }
 
       # TODO add welcome
-      expect(post.user.user_badges.pluck(:badge_id).sort).to eq([Badge::NiceTopic, Badge::GoodTopic])
-
+      expect(post.user.user_badges.pluck(:badge_id)).to contain_exactly(nice_topic.id, good_topic.id)
       expect(post.user.notifications.count).to eq(2)
 
-      notification = post.user.notifications.last
-      data = notification.data_hash
+      data = post.user.notifications.last.data_hash
       expect(data["badge_id"]).to eq(good_topic.id)
       expect(data["badge_slug"]).to eq(good_topic.slug)
       expect(data["username"]).to eq(post.user.username)
 
-      expect(Badge.find(Badge::NiceTopic).grant_count).to eq(1)
-      expect(Badge.find(Badge::GoodTopic).grant_count).to eq(1)
+      expect(nice_topic.grant_count).to eq(1)
+      expect(good_topic.grant_count).to eq(1)
     end
 
     it 'should grant badges in the user locale' do
-
       SiteSetting.allow_user_locale = true
 
       nice_topic = Badge.find(Badge::NiceTopic)
@@ -181,7 +182,7 @@ describe BadgeGranter do
 
   describe 'revoke' do
 
-    let(:admin) { Fabricate(:admin) }
+    fab!(:admin) { Fabricate(:admin) }
     let!(:user_badge) { BadgeGranter.grant(badge, user) }
 
     it 'revokes the badge and does necessary cleanup' do
@@ -198,8 +199,8 @@ describe BadgeGranter do
   end
 
   context "update_badges" do
-    let(:user) { Fabricate(:user) }
-    let(:liker) { Fabricate(:user) }
+    fab!(:user) { Fabricate(:user) }
+    fab!(:liker) { Fabricate(:user) }
 
     before do
       BadgeGranter.clear_queue!
@@ -259,15 +260,15 @@ describe BadgeGranter do
     it "grants system like badges" do
       post = create_post(user: user)
       # Welcome badge
-      action = PostAction.act(liker, post, PostActionType.types[:like])
+      action = PostActionCreator.like(liker, post).post_action
       BadgeGranter.process_queue!
       expect(UserBadge.find_by(user_id: user.id, badge_id: 5)).not_to eq(nil)
 
       post = create_post(topic: post.topic, user: user)
-      action = PostAction.act(liker, post, PostActionType.types[:like])
+      action = PostActionCreator.like(liker, post).post_action
 
       # Nice post badge
-      post.update_attributes like_count: 10
+      post.update like_count: 10
 
       BadgeGranter.queue_badge_grant(Badge::Trigger::PostAction, post_action: action)
       BadgeGranter.process_queue!
@@ -276,19 +277,19 @@ describe BadgeGranter do
       expect(UserBadge.where(user_id: user.id, badge_id: Badge::NicePost).count).to eq(1)
 
       # Good post badge
-      post.update_attributes like_count: 25
+      post.update like_count: 25
       BadgeGranter.queue_badge_grant(Badge::Trigger::PostAction, post_action: action)
       BadgeGranter.process_queue!
       expect(UserBadge.find_by(user_id: user.id, badge_id: Badge::GoodPost)).not_to eq(nil)
 
       # Great post badge
-      post.update_attributes like_count: 50
+      post.update like_count: 50
       BadgeGranter.queue_badge_grant(Badge::Trigger::PostAction, post_action: action)
       BadgeGranter.process_queue!
       expect(UserBadge.find_by(user_id: user.id, badge_id: Badge::GreatPost)).not_to eq(nil)
 
       # Revoke badges on unlike
-      post.update_attributes like_count: 49
+      post.update like_count: 49
       BadgeGranter.backfill(Badge.find(Badge::GreatPost))
       expect(UserBadge.find_by(user_id: user.id, badge_id: Badge::GreatPost)).to eq(nil)
     end

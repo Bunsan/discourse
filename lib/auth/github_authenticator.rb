@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'has_errors'
 
 class Auth::GithubAuthenticator < Auth::Authenticator
@@ -39,6 +41,10 @@ class Auth::GithubAuthenticator < Auth::Authenticator
       return errors.blank?
     end
 
+  end
+
+  def can_connect_existing_user?
+    true
   end
 
   def after_authenticate(auth_token, existing_account: nil)

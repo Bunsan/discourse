@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe Admin::SiteSettingsController do
@@ -7,7 +9,7 @@ describe Admin::SiteSettingsController do
   end
 
   context 'while logged in as an admin' do
-    let(:admin) { Fabricate(:admin) }
+    fab!(:admin) { Fabricate(:admin) }
 
     before do
       sign_in(admin)
@@ -31,6 +33,7 @@ describe Admin::SiteSettingsController do
     describe '#update' do
       before do
         SiteSetting.setting(:test_setting, "default")
+        SiteSetting.setting(:test_upload, "", type: :upload)
         SiteSetting.refresh!
       end
 
@@ -48,6 +51,51 @@ describe Admin::SiteSettingsController do
         }
         expect(response.status).to eq(200)
         expect(SiteSetting.test_setting).to eq('')
+      end
+
+      describe 'upload site settings' do
+        it 'can remove the site setting' do
+          SiteSetting.test_upload = Fabricate(:upload)
+
+          put "/admin/site_settings/test_upload.json", params: {
+            test_upload: nil
+          }
+
+          expect(response.status).to eq(200)
+          expect(SiteSetting.test_upload).to eq(nil)
+        end
+
+        it 'can reset the site setting to the default' do
+          SiteSetting.test_upload = nil
+          default_upload = Upload.find(-1)
+
+          put "/admin/site_settings/test_upload.json", params: {
+            test_upload: default_upload.url
+          }
+
+          expect(response.status).to eq(200)
+          expect(SiteSetting.test_upload).to eq(default_upload)
+        end
+
+        it 'can update the site setting' do
+          upload = Fabricate(:upload)
+
+          put "/admin/site_settings/test_upload.json", params: {
+            test_upload: upload.url
+          }
+
+          expect(response.status).to eq(200)
+          expect(SiteSetting.test_upload).to eq(upload)
+
+          user_history = UserHistory.last
+
+          expect(user_history.action).to eq(
+            UserHistory.actions[:change_site_setting]
+          )
+
+          expect(user_history.previous_value).to eq(nil)
+          expect(user_history.new_value).to eq(upload.url)
+        end
       end
 
       it 'logs the change' do

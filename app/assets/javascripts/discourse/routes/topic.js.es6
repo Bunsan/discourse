@@ -48,6 +48,31 @@ const TopicRoute = Discourse.Route.extend({
   },
 
   actions: {
+    showInvite() {
+      let invitePanelTitle;
+
+      if (this.isPM) {
+        invitePanelTitle = "topic.invite_private.title";
+      } else if (this.invitingToTopic) {
+        invitePanelTitle = "topic.invite_reply.title";
+      } else {
+        invitePanelTitle = "user.invited.create";
+      }
+
+      showModal("share-and-invite", {
+        modalClass: "share-and-invite",
+        panels: [
+          {
+            id: "invite",
+            title: invitePanelTitle,
+            model: {
+              inviteModel: this.modelFor("topic")
+            }
+          }
+        ]
+      });
+    },
+
     showFlags(model) {
       let controller = showModal("flag", { model });
       controller.setProperties({ flagTopic: false });
@@ -61,11 +86,17 @@ const TopicRoute = Discourse.Route.extend({
 
     showTopicStatusUpdate() {
       const model = this.modelFor("topic");
-      model.set("topic_timer", Ember.Object.create(model.get("topic_timer")));
-      model.set(
-        "private_topic_timer",
-        Ember.Object.create(model.get("private_topic_timer"))
-      );
+
+      const topicTimer = model.get("topic_timer");
+      if (!topicTimer) {
+        model.set("topic_timer", {});
+      }
+
+      const privateTopicTimer = model.get("private_topic_timer");
+      if (!privateTopicTimer) {
+        model.set("private_topic_timer", {});
+      }
+
       showModal("edit-topic-timer", { model });
       this.controllerFor("modal").set("modalClass", "edit-topic-timer-modal");
     },
@@ -86,20 +117,14 @@ const TopicRoute = Discourse.Route.extend({
       this.controllerFor("feature_topic").reset();
     },
 
-    showInvite() {
-      showModal("invite", { model: this.modelFor("topic") });
-      this.controllerFor("invite").reset();
-    },
-
     showHistory(model, revision) {
-      showModal("history", { model });
-      const historyController = this.controllerFor("history");
-
+      let historyController = showModal("history", {
+        model,
+        modalClass: "history-modal"
+      });
       historyController.refresh(model.get("id"), revision || "latest");
       historyController.set("post", model);
       historyController.set("topicController", this.controllerFor("topic"));
-
-      this.controllerFor("modal").set("modalClass", "history-modal");
     },
 
     showGrantBadgeModal() {
@@ -114,15 +139,11 @@ const TopicRoute = Discourse.Route.extend({
       this.controllerFor("raw_email").loadRawEmail(model.get("id"));
     },
 
-    mergeTopic() {
-      showModal("merge-topic", {
+    moveToTopic() {
+      showModal("move-to-topic", {
         model: this.modelFor("topic"),
-        title: "topic.merge_topic.title"
+        title: "topic.move_to.title"
       });
-    },
-
-    splitTopic() {
-      showModal("split-topic", { model: this.modelFor("topic") });
     },
 
     changeOwner() {
@@ -146,13 +167,13 @@ const TopicRoute = Discourse.Route.extend({
           postUrl += "/" + currentPost;
         }
 
-        Em.run.cancel(scheduledReplace);
+        Ember.run.cancel(scheduledReplace);
         lastScrollPos = parseInt($(document).scrollTop(), 10);
-        scheduledReplace = Em.run.later(
+        scheduledReplace = Ember.run.later(
           this,
           "_replaceUnlessScrolling",
           postUrl,
-          SCROLL_DELAY
+          Ember.Test ? 0 : SCROLL_DELAY
         );
       }
     },
@@ -163,8 +184,8 @@ const TopicRoute = Discourse.Route.extend({
     },
 
     willTransition() {
-      this._super();
-      Em.run.cancel(scheduledReplace);
+      this._super(...arguments);
+      Ember.run.cancel(scheduledReplace);
       isTransitioning = true;
       return true;
     }
@@ -179,7 +200,7 @@ const TopicRoute = Discourse.Route.extend({
       return;
     }
     lastScrollPos = currentPos;
-    scheduledReplace = Em.run.later(
+    scheduledReplace = Ember.run.later(
       this,
       "_replaceUnlessScrolling",
       url,
@@ -189,13 +210,13 @@ const TopicRoute = Discourse.Route.extend({
 
   setupParams(topic, params) {
     const postStream = topic.get("postStream");
-    postStream.set("summary", Em.get(params, "filter") === "summary");
+    postStream.set("summary", Ember.get(params, "filter") === "summary");
 
-    const usernames = Em.get(params, "username_filters"),
+    const usernames = Ember.get(params, "username_filters"),
       userFilters = postStream.get("userFilters");
 
     userFilters.clear();
-    if (!Em.isEmpty(usernames) && usernames !== "undefined") {
+    if (!Ember.isEmpty(usernames) && usernames !== "undefined") {
       userFilters.addObjects(usernames.split(","));
     }
 
@@ -209,7 +230,7 @@ const TopicRoute = Discourse.Route.extend({
       });
     }
 
-    const queryParams = transition.queryParams;
+    const queryParams = transition.to.queryParams;
 
     let topic = this.modelFor("topic");
     if (topic && topic.get("id") === parseInt(params.id, 10)) {
@@ -225,7 +246,7 @@ const TopicRoute = Discourse.Route.extend({
   },
 
   activate() {
-    this._super();
+    this._super(...arguments);
     isTransitioning = false;
 
     const topic = this.modelFor("topic");
@@ -233,7 +254,7 @@ const TopicRoute = Discourse.Route.extend({
   },
 
   deactivate() {
-    this._super();
+    this._super(...arguments);
 
     this.searchService.set("searchContext", null);
     this.controllerFor("user-card").set("visible", false);

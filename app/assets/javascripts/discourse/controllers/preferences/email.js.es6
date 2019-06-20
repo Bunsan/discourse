@@ -10,36 +10,28 @@ export default Ember.Controller.extend({
   success: false,
   newEmail: null,
 
-  newEmailEmpty: Em.computed.empty("newEmail"),
-  saveDisabled: Em.computed.or(
+  newEmailEmpty: Ember.computed.empty("newEmail"),
+
+  saveDisabled: Ember.computed.or(
     "saving",
     "newEmailEmpty",
     "taken",
     "unchanged",
     "invalidEmail"
   ),
+
   unchanged: propertyEqual("newEmailLower", "currentUser.email"),
 
-  reset: function() {
-    this.setProperties({
-      taken: false,
-      saving: false,
-      error: false,
-      success: false,
-      newEmail: null
-    });
+  @computed("newEmail")
+  newEmailLower(newEmail) {
+    return newEmail.toLowerCase().trim();
   },
 
-  newEmailLower: function() {
-    return this.get("newEmail")
-      .toLowerCase()
-      .trim();
-  }.property("newEmail"),
-
-  saveButtonText: function() {
-    if (this.get("saving")) return I18n.t("saving");
+  @computed("saving")
+  saveButtonText(saving) {
+    if (saving) return I18n.t("saving");
     return I18n.t("user.change");
-  }.property("saving"),
+  },
 
   @computed("newEmail")
   invalidEmail(newEmail) {
@@ -56,29 +48,35 @@ export default Ember.Controller.extend({
     }
   },
 
+  reset() {
+    this.setProperties({
+      taken: false,
+      saving: false,
+      error: false,
+      success: false,
+      newEmail: null
+    });
+  },
+
   actions: {
-    changeEmail: function() {
-      var self = this;
+    changeEmail() {
       this.set("saving", true);
-      return this.get("content")
-        .changeEmail(this.get("newEmail"))
-        .then(
-          function() {
-            self.set("success", true);
-          },
-          function(e) {
-            self.setProperties({ error: true, saving: false });
-            if (
-              e.jqXHR.responseJSON &&
-              e.jqXHR.responseJSON.errors &&
-              e.jqXHR.responseJSON.errors[0]
-            ) {
-              self.set("errorMessage", e.jqXHR.responseJSON.errors[0]);
-            } else {
-              self.set("errorMessage", I18n.t("user.change_email.error"));
-            }
+
+      return this.model.changeEmail(this.newEmail).then(
+        () => this.set("success", true),
+        e => {
+          this.setProperties({ error: true, saving: false });
+          if (
+            e.jqXHR.responseJSON &&
+            e.jqXHR.responseJSON.errors &&
+            e.jqXHR.responseJSON.errors[0]
+          ) {
+            this.set("errorMessage", e.jqXHR.responseJSON.errors[0]);
+          } else {
+            this.set("errorMessage", I18n.t("user.change_email.error"));
           }
-        );
+        }
+      );
     }
   }
 });

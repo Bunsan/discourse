@@ -1,7 +1,12 @@
 import Quote from "discourse/lib/quote";
 import Post from "discourse/models/post";
 import { default as PrettyText, buildOptions } from "pretty-text/pretty-text";
-import { IMAGE_VERSION as v } from "pretty-text/emoji";
+import { IMAGE_VERSION as v } from "pretty-text/emoji/version";
+import { INLINE_ONEBOX_LOADING_CSS_CLASS } from "pretty-text/context/inline-onebox-css-classes";
+import {
+  applyCachedInlineOnebox,
+  deleteCachedInlineOnebox
+} from "pretty-text/inline-oneboxer";
 
 QUnit.module("lib:pretty-text");
 
@@ -195,15 +200,28 @@ QUnit.test("Links", assert => {
     "autolinks a URL"
   );
 
+  const link = "http://www.youtube.com/watch?v=1MrpeBRkM5A";
+
   assert.cooked(
-    "Youtube: http://www.youtube.com/watch?v=1MrpeBRkM5A",
-    '<p>Youtube: <a href="http://www.youtube.com/watch?v=1MrpeBRkM5A">http://www.youtube.com/watch?v=1MrpeBRkM5A</a></p>',
+    `Youtube: ${link}`,
+    `<p>Youtube: <a href="${link}" class="${INLINE_ONEBOX_LOADING_CSS_CLASS}">${link}</a></p>`,
     "allows links to contain query params"
   );
 
+  try {
+    applyCachedInlineOnebox(link, {});
+
+    assert.cooked(
+      `Youtube: ${link}`,
+      `<p>Youtube: <a href="${link}">${link}</a></p>`
+    );
+  } finally {
+    deleteCachedInlineOnebox(link);
+  }
+
   assert.cooked(
     "Derpy: http://derp.com?__test=1",
-    '<p>Derpy: <a href="http://derp.com?__test=1">http://derp.com?__test=1</a></p>',
+    `<p>Derpy: <a href="http://derp.com?__test=1" class="${INLINE_ONEBOX_LOADING_CSS_CLASS}">http://derp.com?__test=1</a></p>`,
     "works with double underscores in urls"
   );
 
@@ -233,7 +251,7 @@ QUnit.test("Links", assert => {
 
   assert.cooked(
     "Batman: http://en.wikipedia.org/wiki/The_Dark_Knight_(film)",
-    '<p>Batman: <a href="http://en.wikipedia.org/wiki/The_Dark_Knight_(film)">http://en.wikipedia.org/wiki/The_Dark_Knight_(film)</a></p>',
+    `<p>Batman: <a href="http://en.wikipedia.org/wiki/The_Dark_Knight_(film)" class="${INLINE_ONEBOX_LOADING_CSS_CLASS}">http://en.wikipedia.org/wiki/The_Dark_Knight_(film)</a></p>`,
     "autolinks a URL with parentheses (like Wikipedia)"
   );
 
@@ -245,7 +263,7 @@ QUnit.test("Links", assert => {
 
   assert.cooked(
     "1. View @eviltrout's profile here: http://meta.discourse.org/u/eviltrout/activity<br/>next line.",
-    '<ol>\n<li>View <span class="mention">@eviltrout</span>\'s profile here: <a href="http://meta.discourse.org/u/eviltrout/activity">http://meta.discourse.org/u/eviltrout/activity</a><br>next line.</li>\n</ol>',
+    `<ol>\n<li>View <span class="mention">@eviltrout</span>\'s profile here: <a href="http://meta.discourse.org/u/eviltrout/activity" class="${INLINE_ONEBOX_LOADING_CSS_CLASS}">http://meta.discourse.org/u/eviltrout/activity</a><br>next line.</li>\n</ol>`,
     "allows autolinking within a list without inserting a paragraph."
   );
 
@@ -270,8 +288,8 @@ QUnit.test("Links", assert => {
   assert.cooked(
     "http://discourse.org and http://discourse.org/another_url and http://www.imdb.com/name/nm2225369",
     '<p><a href="http://discourse.org">http://discourse.org</a> and ' +
-      '<a href="http://discourse.org/another_url">http://discourse.org/another_url</a> and ' +
-      '<a href="http://www.imdb.com/name/nm2225369">http://www.imdb.com/name/nm2225369</a></p>',
+      `<a href="http://discourse.org/another_url" class="${INLINE_ONEBOX_LOADING_CSS_CLASS}">http://discourse.org/another_url</a> and ` +
+      `<a href="http://www.imdb.com/name/nm2225369" class="${INLINE_ONEBOX_LOADING_CSS_CLASS}">http://www.imdb.com/name/nm2225369</a></p>`,
     "allows multiple links on one line"
   );
 
@@ -435,16 +453,9 @@ QUnit.test("Quotes", assert => {
 });
 
 QUnit.test("Mentions", assert => {
-  const alwaysTrue = {
-    mentionLookup: function() {
-      return "user";
-    }
-  };
-
-  assert.cookedOptions(
+  assert.cooked(
     "Hello @sam",
-    alwaysTrue,
-    '<p>Hello <a class="mention" href="/u/sam">@sam</a></p>',
+    '<p>Hello <span class="mention">@sam</span></p>',
     "translates mentions to links"
   );
 
@@ -454,9 +465,8 @@ QUnit.test("Mentions", assert => {
     "it doesn't do mentions within links"
   );
 
-  assert.cookedOptions(
+  assert.cooked(
     "[@codinghorror](https://twitter.com/codinghorror)",
-    alwaysTrue,
     '<p><a href="https://twitter.com/codinghorror">@codinghorror</a></p>',
     "it doesn't do link mentions within links"
   );
@@ -557,18 +567,52 @@ QUnit.test("Mentions", assert => {
     "handles mentions separated by a slash."
   );
 
-  assert.cookedOptions(
-    "@eviltrout",
-    alwaysTrue,
-    '<p><a class="mention" href="/u/eviltrout">@eviltrout</a></p>',
-    "it doesn't onebox mentions"
+  assert.cooked(
+    "<small>a @sam c</small>",
+    '<p><small>a <span class="mention">@sam</span> c</small></p>',
+    "it allows mentions within HTML tags"
+  );
+
+  assert.cooked(
+    "@_sam @1sam @ab-cd.123_ABC-xYz @sam1",
+    '<p><span class="mention">@_sam</span> <span class="mention">@1sam</span> <span class="mention">@ab-cd.123_ABC-xYz</span> <span class="mention">@sam1</span></p>',
+    "it detects mentions of valid usernames"
+  );
+
+  assert.cooked(
+    "@.sam @-sam @sam. @sam_ @sam-",
+    '<p>@.sam @-sam <span class="mention">@sam</span>. <span class="mention">@sam</span>_ <span class="mention">@sam</span>-</p>',
+    "it does not detect mentions of invalid usernames"
   );
 
   assert.cookedOptions(
-    "<small>a @sam c</small>",
-    alwaysTrue,
-    '<p><small>a <a class="mention" href="/u/sam">@sam</a> c</small></p>',
-    "it allows mentions within HTML tags"
+    "Hello @狮子",
+    { siteSettings: { unicode_usernames: false } },
+    "<p>Hello @狮子</p>",
+    "it does not detect mentions of Unicode usernames"
+  );
+});
+
+QUnit.test("Mentions - Unicode usernames enabled", assert => {
+  assert.cookedOptions(
+    "Hello @狮子",
+    { siteSettings: { unicode_usernames: true } },
+    '<p>Hello <span class="mention">@狮子</span></p>',
+    "it detects mentions of Unicode usernames"
+  );
+
+  assert.cookedOptions(
+    "@狮子 @_狮子 @1狮子 @狮-ø.١٢٣_Ö-ழ் @狮子1",
+    { siteSettings: { unicode_usernames: true } },
+    '<p><span class="mention">@狮子</span> <span class="mention">@_狮子</span> <span class="mention">@1狮子</span> <span class="mention">@狮-ø.١٢٣_Ö-ழ்</span> <span class="mention">@狮子1</span></p>',
+    "it detects mentions of valid Unicode usernames"
+  );
+
+  assert.cookedOptions(
+    "@.狮子 @-狮子 @狮子. @狮子_ @狮子-",
+    { siteSettings: { unicode_usernames: true } },
+    '<p>@.狮子 @-狮子 <span class="mention">@狮子</span>. <span class="mention">@狮子</span>_ <span class="mention">@狮子</span>-</p>',
+    "it does not detect mentions of invalid Unicode usernames"
   );
 });
 
@@ -635,6 +679,12 @@ QUnit.test("Category hashtags", assert => {
     "<small>#category-hashtag</small>",
     '<p><small><span class="hashtag">#category-hashtag</span></small></p>',
     "it works between HTML tags"
+  );
+
+  assert.cooked(
+    "Checkout #ụdị",
+    '<p>Checkout <span class="hashtag">#ụdị</span></p>',
+    "it works for non-english characters"
   );
 });
 
@@ -721,13 +771,13 @@ QUnit.test("Oneboxing", assert => {
   assert.ok(
     !matches(
       "- http://www.textfiles.com/bbs/MINDVOX/FORUMS/ethics\n\n- http://drupal.org",
-      /onebox/
+      /class="onebox"/
     ),
     "doesn't onebox a link within a list"
   );
 
   assert.ok(
-    matches("http://test.com", /onebox/),
+    matches("http://test.com", /class="onebox"/),
     "adds a onebox class to a link on its own line"
   );
   assert.ok(
@@ -1366,6 +1416,20 @@ QUnit.test("emoji", assert => {
   assert.cooked(
     "8-)",
     `<p><img src="/images/emoji/emoji_one/sunglasses.png?v=${v}" title=":sunglasses:" class="emoji" alt=":sunglasses:"></p>`
+  );
+});
+
+QUnit.test("emoji - enable_inline_emoji_translation", assert => {
+  assert.cookedOptions(
+    "test:smile:test",
+    { siteSettings: { enable_inline_emoji_translation: false } },
+    `<p>test:smile:test</p>`
+  );
+
+  assert.cookedOptions(
+    "test:smile:test",
+    { siteSettings: { enable_inline_emoji_translation: true } },
+    `<p>test<img src="/images/emoji/emoji_one/smile.png?v=${v}" title=":smile:" class="emoji" alt=":smile:">test</p>`
   );
 });
 

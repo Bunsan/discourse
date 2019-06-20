@@ -4,7 +4,7 @@ import { Placeholder } from "discourse/lib/posts-with-placeholders";
 import { addWidgetCleanCallback } from "discourse/components/mount-widget";
 
 let transformCallbacks = null;
-function postTransformCallbacks(transformed) {
+export function postTransformCallbacks(transformed) {
   if (transformCallbacks === null) {
     return;
   }
@@ -34,7 +34,7 @@ export function cloak(post, component) {
     return;
   }
 
-  const $post = $(`#post_${post.post_number}`);
+  const $post = $(`#post_${post.post_number}`).parent();
   _cloaked[post.id] = true;
   _heights[post.id] = $post.outerHeight();
 

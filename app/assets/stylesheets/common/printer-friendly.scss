@@ -8,7 +8,7 @@
   .topic-map,
   .post-menu-area.clearfix,
   div#topic-footer-buttons,
-  div#suggested-topics,
+  div.suggested-topics,
   div#progress-topic-wrapper,
   #topic-progress-wrapper,
   div.nums,
@@ -28,15 +28,21 @@
   .edit-topic,
   a.reply-to-tab,
   a.reply-new,
-  div.has-pending-posts,
   div.time-gap,
   #bottom,
   #footer,
   .alert-info,
   .badge-category,
   .badge-category-bg,
-  .badge-notification.clicks {
+  .badge-notification.clicks,
+  .crawler-nav,
+  .powered-by-link {
     display: none !important;
+  }
+  /* For readability */
+  a,
+  a:visited {
+    color: #0088cc !important;
   }
   /* bottom border to help separate posts */
   div.row {
@@ -71,9 +77,6 @@
   .gap {
     width: auto;
   }
-  .gutter {
-    padding: 0;
-  }
   /* restyle div#topic-title */
   #topic-title {
     margin: 0;
@@ -90,10 +93,6 @@
   a:visited {
     color: #ddd;
     font-weight: bold;
-  }
-  /* hide OP Solved plugin stuff */
-  .topic-after-cooked-outlet.solved-panel {
-    display: none;
   }
   /* localhost  - MOOT for production */
   .topic-category-outlet.show-topic-category-location,

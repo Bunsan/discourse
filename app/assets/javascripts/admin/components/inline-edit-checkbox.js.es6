@@ -4,16 +4,20 @@ import {
 } from "ember-addons/ember-computed-decorators";
 
 export default Ember.Component.extend({
-  init() {
-    this._super();
-    this.set("checkedInternal", this.get("checked"));
-  },
-
   classNames: ["inline-edit"],
+
+  checked: null,
+  checkedInternal: null,
+
+  init() {
+    this._super(...arguments);
+
+    this.set("checkedInternal", this.checked);
+  },
 
   @observes("checked")
   checkedChanged() {
-    this.set("checkedInternal", this.get("checked"));
+    this.set("checkedInternal", this.checked);
   },
 
   @computed("labelKey")
@@ -28,12 +32,12 @@ export default Ember.Component.extend({
 
   actions: {
     cancelled() {
-      this.set("checkedInternal", this.get("checked"));
+      this.set("checkedInternal", this.checked);
     },
 
     finished() {
-      this.set("checked", this.get("checkedInternal"));
-      this.sendAction();
+      this.set("checked", this.checkedInternal);
+      this.action();
     }
   }
 });

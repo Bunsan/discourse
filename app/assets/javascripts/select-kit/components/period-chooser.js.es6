@@ -5,7 +5,7 @@ export default DropdownSelectBoxComponent.extend({
   classNames: ["period-chooser"],
   rowComponent: "period-chooser/period-chooser-row",
   headerComponent: "period-chooser/period-chooser-header",
-  content: Ember.computed.alias("site.periods"),
+  content: Ember.computed.oneWay("site.periods"),
   value: Ember.computed.alias("period"),
   isHidden: Ember.computed.alias("showPeriods"),
 
@@ -14,19 +14,21 @@ export default DropdownSelectBoxComponent.extend({
     return isExpanded ? "caret-up" : "caret-down";
   },
 
-  @on("didReceiveAttrs")
+  @on("didUpdateAttrs", "init")
   _setFullDay() {
-    this.get("headerComponentOptions").setProperties({
-      fullDay: this.get("fullDay")
+    this.headerComponentOptions.setProperties({
+      fullDay: this.fullDay
     });
-    this.get("rowComponentOptions").setProperties({
-      fullDay: this.get("fullDay")
+    this.rowComponentOptions.setProperties({
+      fullDay: this.fullDay
     });
   },
 
   actions: {
     onSelect() {
-      this.sendAction("action", this.get("computedValue"));
+      if (this.action) {
+        this.action(this.computedValue);
+      }
     }
   }
 });

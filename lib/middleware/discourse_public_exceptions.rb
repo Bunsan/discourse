@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # since all the rescue from clauses are not caught by the application controller for matches
 # we need to handle certain exceptions here
 module Middleware
@@ -19,6 +21,9 @@ module Middleware
       # Special handling for invalid params, in this case we can not re-dispatch
       # the Request object has a "broken" .params which can not be accessed
       exception = nil if Rack::QueryParser::InvalidParameterError === exception
+
+      # We also can not dispatch bad requests as no proper params
+      exception = nil if ActionController::BadRequest === exception
 
       if exception
         begin

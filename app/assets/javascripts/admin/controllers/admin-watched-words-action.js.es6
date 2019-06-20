@@ -39,17 +39,17 @@ export default Ember.Controller.extend({
 
   actions: {
     recordAdded(arg) {
-      const a = this.findAction(this.get("actionNameKey"));
+      const a = this.findAction(this.actionNameKey);
       if (a) {
         a.words.unshiftObject(arg);
         a.incrementProperty("count");
-        Em.run.schedule("afterRender", () => {
+        Ember.run.schedule("afterRender", () => {
           // remove from other actions lists
           let match = null;
           this.get("adminWatchedWords.model").forEach(action => {
             if (match) return;
 
-            if (action.nameKey !== this.get("actionNameKey")) {
+            if (action.nameKey !== this.actionNameKey) {
               match = action.words.findBy("id", arg.id);
               if (match) {
                 action.words.removeObject(match);
@@ -62,7 +62,7 @@ export default Ember.Controller.extend({
     },
 
     recordRemoved(arg) {
-      const a = this.findAction(this.get("actionNameKey"));
+      const a = this.findAction(this.actionNameKey);
       if (a) {
         a.words.removeObject(arg);
         a.decrementProperty("count");

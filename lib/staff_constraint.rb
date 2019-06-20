@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'current_user'
 
 class StaffConstraint
@@ -7,7 +9,7 @@ class StaffConstraint
     provider.current_user &&
       provider.current_user.staff? &&
       custom_staff_check(request)
-  rescue Discourse::InvalidAccess
+  rescue Discourse::InvalidAccess, Discourse::ReadOnly
     false
   end
 

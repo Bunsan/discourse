@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 require_dependency 'site_settings/defaults_provider'
 
@@ -12,14 +14,6 @@ describe SiteSettings::DefaultsProvider do
 
   after do
     MessageBus.on
-  end
-
-  def new_settings(provider)
-    Class.new do
-      extend SiteSettingExtension
-      self.listen_for_changes = false
-      self.provider = provider
-    end
   end
 
   let(:settings) do

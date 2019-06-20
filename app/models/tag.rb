@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Tag < ActiveRecord::Base
   include Searchable
   include HasDestroyedWebHook
@@ -8,6 +10,8 @@ class Tag < ActiveRecord::Base
     name = Array(name).map(&:downcase)
     where("lower(name) IN (?)", name)
   end
+
+  scope :unused, -> { where(topic_count: 0, pm_topic_count: 0) }
 
   has_many :tag_users # notification settings
 

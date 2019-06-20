@@ -39,10 +39,7 @@ export default createWidget("post-links", {
     }
 
     // only show incoming
-    const links = _(this.attrs.links)
-      .filter(l => l.reflection)
-      .uniq(true, l => l.title)
-      .value();
+    const links = this.attrs.links.filter(l => l.reflection).uniqBy("title");
 
     if (links.length === 0) {
       return;
@@ -52,7 +49,7 @@ export default createWidget("post-links", {
 
     // show all links
     if (links.length <= 5 || !state.collapsed) {
-      _.each(links, l => result.push(this.linkHtml(l)));
+      links.forEach(l => result.push(this.linkHtml(l)));
     } else {
       const max = Math.min(5, links.length);
       for (let i = 0; i < max; i++) {

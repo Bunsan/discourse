@@ -12,13 +12,17 @@ class Group < ActiveRecord::Base
 
   has_many :category_groups, dependent: :destroy
   has_many :group_users, dependent: :destroy
+  has_many :group_requests, dependent: :destroy
   has_many :group_mentions, dependent: :destroy
 
   has_many :group_archived_messages, dependent: :destroy
 
   has_many :categories, through: :category_groups
   has_many :users, through: :group_users
+  has_many :requesters, through: :group_requests, source: :user
   has_many :group_histories, dependent: :destroy
+  has_many :category_reviews, class_name: 'Category', foreign_key: :reviewable_by_group_id, dependent: :nullify
+  has_many :reviewables, foreign_key: :reviewable_by_group_id, dependent: :nullify
 
   has_and_belongs_to_many :web_hooks
 
@@ -42,6 +46,13 @@ class Group < ActiveRecord::Base
 
   def expire_cache
     ApplicationSerializer.expire_cache_fragment!("group_names")
+    SvgSprite.expire_cache
+  end
+
+  def remove_review_groups
+    puts self.id!
+    Category.where(review_group_id: self.id).update_all(review_group_id: nil)
+    Category.where(review_group_id: self.id).update_all(review_group_id: nil)
   end
 
   validate :name_format_validator
@@ -49,7 +60,7 @@ class Group < ActiveRecord::Base
   validate :automatic_membership_email_domains_format_validator
   validate :incoming_email_validator
   validate :can_allow_membership_requests, if: :allow_membership_requests
-  validates :flair_url, url: true, if: Proc.new { |g| g.flair_url && g.flair_url[0, 3] != 'fa-' }
+  validates :flair_url, url: true, if: Proc.new { |g| g.flair_url && g.flair_url.exclude?('fa-') }
   validate :validate_grant_trust_level, if: :will_save_change_to_grant_trust_level?
 
   AUTO_GROUPS = {
@@ -87,8 +98,12 @@ class Group < ActiveRecord::Base
   validates :mentionable_level, inclusion: { in: ALIAS_LEVELS.values }
   validates :messageable_level, inclusion: { in: ALIAS_LEVELS.values }
 
-  scope :visible_groups, Proc.new { |user, order|
-    groups = Group.order(order || "name ASC").where("groups.id > 0")
+  scope :visible_groups, Proc.new { |user, order, opts|
+    groups = self.order(order || "name ASC")
+
+    if !opts || !opts[:include_everyone]
+      groups = groups.where("groups.id > 0")
+    end
 
     unless user&.admin
       sql = <<~SQL
@@ -132,22 +147,30 @@ class Group < ActiveRecord::Base
   }
 
   scope :mentionable, lambda { |user|
-
-    where("mentionable_level in (:levels) OR
-          (
-            mentionable_level = #{ALIAS_LEVELS[:members_mods_and_admins]} AND id in (
-            SELECT group_id FROM group_users WHERE user_id = :user_id)
-          )", levels: alias_levels(user), user_id: user && user.id)
+    where(self.mentionable_sql_clause,
+      levels: alias_levels(user),
+      user_id: user&.id
+    )
   }
 
   scope :messageable, lambda { |user|
-
     where("messageable_level in (:levels) OR
           (
             messageable_level = #{ALIAS_LEVELS[:members_mods_and_admins]} AND id in (
             SELECT group_id FROM group_users WHERE user_id = :user_id)
           )", levels: alias_levels(user), user_id: user && user.id)
   }
+
+  def self.mentionable_sql_clause
+    <<~SQL
+    mentionable_level in (:levels)
+    OR (
+      mentionable_level = #{ALIAS_LEVELS[:members_mods_and_admins]}
+      AND id in (
+        SELECT group_id FROM group_users WHERE user_id = :user_id)
+      )
+    SQL
+  end
 
   def self.alias_levels(user)
     levels = [ALIAS_LEVELS[:everyone]]
@@ -166,13 +189,30 @@ class Group < ActiveRecord::Base
     levels
   end
 
+  def self.plugin_editable_group_custom_fields
+    @plugin_editable_group_custom_fields ||= {}
+  end
+
+  def self.register_plugin_editable_group_custom_field(custom_field_name, plugin)
+    plugin_editable_group_custom_fields[custom_field_name] = plugin
+  end
+
+  def self.editable_group_custom_fields
+    plugin_editable_group_custom_fields.reduce([]) do |fields, (k, v)|
+      next(fields) unless v.enabled?
+      fields << k
+    end.uniq
+  end
+
   def downcase_incoming_email
     self.incoming_email = (incoming_email || "").strip.downcase.presence
   end
 
   def cook_bio
-    if !self.bio_raw.blank?
+    if self.bio_raw.present?
       self.bio_cooked = PrettyText.cook(self.bio_raw)
+    else
+      self.bio_cooked = nil
     end
   end
 
@@ -193,10 +233,10 @@ class Group < ActiveRecord::Base
 
   def posts_for(guardian, opts = nil)
     opts ||= {}
-    user_ids = group_users.map { |gu| gu.user_id }
-    result = Post.includes(:user, :topic, topic: :category)
+    result = Post.joins(:topic, user: :groups, topic: :category)
+      .preload(:topic, user: :groups, topic: :category)
       .references(:posts, :topics, :category)
-      .where(user_id: user_ids)
+      .where(groups: { id: id })
       .where('topics.archetype <> ?', Archetype.private_message)
       .where('topics.visible')
       .where(post_type: Post.types[:regular])
@@ -266,10 +306,10 @@ class Group < ActiveRecord::Base
     end
 
     # don't allow shoddy localization to break this
-    localized_name = I18n.t("groups.default_names.#{name}").downcase
+    localized_name = User.normalize_username(I18n.t("groups.default_names.#{name}", locale: SiteSetting.default_locale))
     validator = UsernameValidator.new(localized_name)
 
-    if !Group.where("LOWER(name) = ?", localized_name).exists? && validator.valid_format?
+    if validator.valid_format? && !User.username_exists?(localized_name)
       group.name = localized_name
     end
 
@@ -277,7 +317,7 @@ class Group < ActiveRecord::Base
     # way to have the membership in a table
     case name
     when :everyone
-      group.visibility_level = Group.visibility_levels[:owners]
+      group.visibility_level = Group.visibility_levels[:staff]
       group.save!
       return group
     when :moderators
@@ -288,13 +328,13 @@ class Group < ActiveRecord::Base
     remove_subquery =
       case name
       when :admins
-        "SELECT id FROM users WHERE id <= 0 OR NOT admin"
+        "SELECT id FROM users WHERE id <= 0 OR NOT admin OR staged"
       when :moderators
-        "SELECT id FROM users WHERE id <= 0 OR NOT moderator"
+        "SELECT id FROM users WHERE id <= 0 OR NOT moderator OR staged"
       when :staff
-        "SELECT id FROM users WHERE id <= 0 OR (NOT admin AND NOT moderator)"
+        "SELECT id FROM users WHERE id <= 0 OR (NOT admin AND NOT moderator) OR staged"
       when :trust_level_0, :trust_level_1, :trust_level_2, :trust_level_3, :trust_level_4
-        "SELECT id FROM users WHERE id <= 0 OR trust_level < #{id - 10}"
+        "SELECT id FROM users WHERE id <= 0 OR trust_level < #{id - 10} OR staged"
       end
 
     DB.exec <<-SQL
@@ -308,15 +348,15 @@ class Group < ActiveRecord::Base
     insert_subquery =
       case name
       when :admins
-        "SELECT id FROM users WHERE id > 0 AND admin"
+        "SELECT id FROM users WHERE id > 0 AND admin AND NOT staged"
       when :moderators
-        "SELECT id FROM users WHERE id > 0 AND moderator"
+        "SELECT id FROM users WHERE id > 0 AND moderator AND NOT staged"
       when :staff
-        "SELECT id FROM users WHERE id > 0 AND (moderator OR admin)"
+        "SELECT id FROM users WHERE id > 0 AND (moderator OR admin) AND NOT staged"
       when :trust_level_1, :trust_level_2, :trust_level_3, :trust_level_4
-        "SELECT id FROM users WHERE id > 0 AND trust_level >= #{id - 10}"
+        "SELECT id FROM users WHERE id > 0 AND trust_level >= #{id - 10} AND NOT staged"
       when :trust_level_0
-        "SELECT id FROM users WHERE id > 0"
+        "SELECT id FROM users WHERE id > 0 AND NOT staged"
       end
 
     DB.exec <<-SQL
@@ -606,22 +646,15 @@ class Group < ActiveRecord::Base
     # avoid strip! here, it works now
     # but may not continue to work long term, especially
     # once we start returning frozen strings
-    if self.name != (stripped = self.name.strip)
+    if self.name != (stripped = self.name.unicode_normalize.strip)
       self.name = stripped
     end
 
     UsernameValidator.perform_validation(self, 'name') || begin
-      name_lower = self.name.downcase
+      normalized_name = User.normalize_username(self.name)
 
-      if self.will_save_change_to_name? && self.name_was&.downcase != name_lower
-
-        existing = DB.exec(
-          User::USERNAME_EXISTS_SQL, username: name_lower
-        ) > 0
-
-        if existing
-          errors.add(:name, I18n.t("activerecord.errors.messages.taken"))
-        end
+      if self.will_save_change_to_name? && User.normalize_username(self.name_was) != normalized_name && User.username_exists?(self.name)
+        errors.add(:name, I18n.t("activerecord.errors.messages.taken"))
       end
     end
   end

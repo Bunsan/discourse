@@ -1,17 +1,20 @@
 import ViewingActionType from "discourse/mixins/viewing-action-type";
 
 export default Discourse.Route.extend(ViewingActionType, {
+  queryParams: {
+    acting_username: { refreshModel: true }
+  },
+
   model() {
     return this.modelFor("user").get("stream");
   },
 
-  afterModel() {
-    return this.modelFor("user")
-      .get("stream")
-      .filterBy(
-        this.get("userActionType"),
-        this.get("noContentHelpKey") || "user_activity.no_default"
-      );
+  afterModel(model, transition) {
+    return model.filterBy({
+      filter: this.userActionType,
+      noContentHelpKey: this.noContentHelpKey || "user_activity.no_default",
+      actingUsername: transition.to.queryParams.acting_username
+    });
   },
 
   renderTemplate() {
@@ -20,7 +23,7 @@ export default Discourse.Route.extend(ViewingActionType, {
 
   setupController(controller, model) {
     controller.set("model", model);
-    this.viewingActionType(this.get("userActionType"));
+    this.viewingActionType(this.userActionType);
   },
 
   actions: {

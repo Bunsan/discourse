@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class Admin::SiteSettingsController < Admin::AdminController
   rescue_from Discourse::InvalidParameters do |e|
     render_json_error e.message, status: 422
@@ -13,6 +15,11 @@ class Admin::SiteSettingsController < Admin::AdminController
     value = params[id]
     value.strip! if value.is_a?(String)
     raise_access_hidden_setting(id)
+
+    if SiteSetting.type_supervisor.get_type(id) == :upload
+      value = Upload.find_by(url: value) || ''
+    end
+
     SiteSetting.set_and_log(id, value, current_user)
     render body: nil
   end

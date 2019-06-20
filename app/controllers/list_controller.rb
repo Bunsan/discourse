@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'topic_list_responder'
 
 class ListController < ApplicationController
@@ -107,6 +109,8 @@ class ListController < ApplicationController
             @title = I18n.t('js.filters.with_topics', filter: filter_title)
           end
           @title << " - #{SiteSetting.title}"
+        elsif (filter.to_s == current_homepage) && SiteSetting.short_site_description.present?
+          @title = "#{SiteSetting.title} - #{SiteSetting.short_site_description}"
         end
       end
 
@@ -115,20 +119,20 @@ class ListController < ApplicationController
 
     define_method("category_#{filter}") do
       canonical_url "#{Discourse.base_url_no_prefix}#{@category.url}"
-      self.send(filter, category: @category.id)
+      self.public_send(filter, category: @category.id)
     end
 
     define_method("category_none_#{filter}") do
-      self.send(filter, category: @category.id, no_subcategories: true)
+      self.public_send(filter, category: @category.id, no_subcategories: true)
     end
 
     define_method("parent_category_category_#{filter}") do
       canonical_url "#{Discourse.base_url_no_prefix}#{@category.url}"
-      self.send(filter, category: @category.id)
+      self.public_send(filter, category: @category.id)
     end
 
     define_method("parent_category_category_none_#{filter}") do
-      self.send(filter, category: @category.id)
+      self.public_send(filter, category: @category.id)
     end
   end
 
@@ -140,7 +144,7 @@ class ListController < ApplicationController
     if view_method == 'top'
       top(category: @category.id)
     else
-      self.send(view_method)
+      self.public_send(view_method)
     end
   end
 
@@ -235,7 +239,10 @@ class ListController < ApplicationController
     @link = "#{Discourse.base_url}/u/#{target_user.username}/activity/topics"
     @atom_link = "#{Discourse.base_url}/u/#{target_user.username}/activity/topics.rss"
     @description = I18n.t("rss_description.user_topics", username: target_user.username)
-    @topic_list = TopicQuery.new(nil, order: 'created').send("list_topics_by", target_user)
+
+    @topic_list = TopicQuery
+      .new(nil, order: 'created')
+      .public_send("list_topics_by", target_user)
 
     render 'list', formats: [:rss]
   end
@@ -243,7 +250,7 @@ class ListController < ApplicationController
   def top(options = nil)
     options ||= {}
     period = ListController.best_period_for(current_user.try(:previous_visit_at), options[:category])
-    send("top_#{period}", options)
+    public_send("top_#{period}", options)
   end
 
   def category_top
@@ -283,15 +290,18 @@ class ListController < ApplicationController
     end
 
     define_method("category_top_#{period}") do
-      self.send("top_#{period}", category: @category.id)
+      self.public_send("top_#{period}", category: @category.id)
     end
 
     define_method("category_none_top_#{period}") do
-      self.send("top_#{period}", category: @category.id, no_subcategories: true)
+      self.public_send("top_#{period}",
+        category: @category.id,
+        no_subcategories: true
+      )
     end
 
     define_method("parent_category_category_top_#{period}") do
-      self.send("top_#{period}", category: @category.id)
+      self.public_send("top_#{period}", category: @category.id)
     end
 
     # rss feed
@@ -380,8 +390,9 @@ class ListController < ApplicationController
 
     # hacky columns get special handling
     options[:topic_ids] = param_to_integer_list(:topic_ids)
-    options[:no_subcategories] = options[:no_subcategories] == 'true'
-    options[:slow_platform] = slow_platform?
+    if options[:no_subcategories] == 'true'
+      options[:no_subcategories] = true
+    end
 
     options
   end
@@ -395,7 +406,7 @@ class ListController < ApplicationController
   end
 
   def generate_list_for(action, target_user, opts)
-    TopicQuery.new(current_user, opts).send("list_#{action}", target_user)
+    TopicQuery.new(current_user, opts).public_send("list_#{action}", target_user)
   end
 
   def construct_url_with(action, opts, url_prefix = nil)
@@ -422,24 +433,24 @@ class ListController < ApplicationController
   end
 
   def self.best_period_with_topics_for(previous_visit_at, category_id = nil, default_period = SiteSetting.top_page_default_timeframe)
-    best_periods_for(previous_visit_at, default_period.to_sym).each do |period|
+    best_periods_for(previous_visit_at, default_period.to_sym).find do |period|
       top_topics = TopTopic.where("#{period}_score > 0")
       top_topics = top_topics.joins(:topic).where("topics.category_id = ?", category_id) if category_id
       top_topics = top_topics.limit(SiteSetting.topics_per_period_in_top_page)
-      return period if top_topics.count == SiteSetting.topics_per_period_in_top_page
+      top_topics.count == SiteSetting.topics_per_period_in_top_page
     end
-
-    false
   end
 
   def self.best_periods_for(date, default_period = :all)
-    date ||= 1.year.ago
+    return [default_period, :all].uniq unless date
+
     periods = []
-    periods << default_period if :all     != default_period
-    periods << :daily         if :daily   != default_period && date > 8.days.ago
-    periods << :weekly        if :weekly  != default_period && date > 35.days.ago
-    periods << :monthly       if :monthly != default_period && date > 180.days.ago
-    periods << :yearly        if :yearly  != default_period
+    periods << :daily     if date > (1.week + 1.day).ago
+    periods << :weekly    if date > (1.month + 1.week).ago
+    periods << :monthly   if date > (3.months + 3.weeks).ago
+    periods << :quarterly if date > (1.year + 1.month).ago
+    periods << :yearly    if date > 3.years.ago
+    periods << :all
     periods
   end
 

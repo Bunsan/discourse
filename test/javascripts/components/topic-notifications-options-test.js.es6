@@ -1,3 +1,4 @@
+import selectKit from "helpers/select-kit-helper";
 import componentTest from "helpers/component-test";
 import Topic from "discourse/models/topic";
 
@@ -8,7 +9,7 @@ const buildTopic = function(archetype) {
     details: {
       notification_level: 1
     },
-    archetype: archetype
+    archetype
   });
 };
 
@@ -70,6 +71,7 @@ componentTest("PM topic notification level descriptions", {
       descriptions.length,
       "it has the correct copy"
     );
+
     uiTexts.forEach((text, index) => {
       assert.equal(
         text.trim(),

@@ -23,34 +23,36 @@ export default SelectKitComponent.extend({
   values: null,
 
   init() {
-    this._super();
+    this._super(...arguments);
 
     this.set("computedValues", []);
 
-    if (isNone(this.get("values"))) {
+    if (isNone(this.values)) {
       this.set("values", []);
     }
 
-    this.get("headerComponentOptions").setProperties({
-      selectedNameComponent: this.get("selectedNameComponent")
+    this.headerComponentOptions.setProperties({
+      selectedNameComponent: this.selectedNameComponent
     });
   },
 
   @on("didRender")
   _setChoicesMaxWidth() {
     const width = this.$body().outerWidth(false);
-    this.$(".choices").css({ maxWidth: width });
+    if (width > 0) {
+      this.$(".choices").css({ maxWidth: width });
+    }
   },
 
-  @on("didReceiveAttrs")
+  @on("didUpdateAttrs", "init")
   _compute() {
     run.scheduleOnce("afterRender", () => {
       this.willComputeAttributes();
-      let content = this.get("content") || [];
-      let asyncContent = this.get("asyncContent") || [];
+      let content = this.content || [];
+      let asyncContent = this.asyncContent || [];
       content = this.willComputeContent(content);
       asyncContent = this.willComputeAsyncContent(asyncContent);
-      let values = this._beforeWillComputeValues(this.get("values"));
+      let values = this._beforeWillComputeValues(this.values);
       content = this.computeContent(content);
       asyncContent = this.computeAsyncContent(asyncContent);
       content = this._beforeDidComputeContent(content);
@@ -102,16 +104,21 @@ export default SelectKitComponent.extend({
 
   mutateAttributes() {
     run.next(() => {
-      if (this.get("isDestroyed") || this.get("isDestroying")) return;
+      if (this.isDestroyed || this.isDestroying) return;
 
-      this.mutateContent(this.get("computedContent"));
-      this.mutateValues(this.get("computedValues"));
+      this.mutateContent(this.computedContent);
+      this.mutateValues(this.computedValues);
     });
   },
   mutateValues(computedValues) {
     this.set("values", computedValues);
   },
   mutateContent() {},
+
+  forceValues(values) {
+    this.mutateValues(values);
+    this._compute();
+  },
 
   filterComputedContent(computedContent, computedValues, filter) {
     return computedContent.filter(c => {
@@ -125,8 +132,8 @@ export default SelectKitComponent.extend({
       return !computedValues.includes(get(c, "value"));
     });
 
-    if (this.get("limitMatches")) {
-      return computedAsyncContent.slice(0, this.get("limitMatches"));
+    if (this.limitMatches) {
+      return computedAsyncContent.slice(0, this.limitMatches);
     }
 
     return computedAsyncContent;
@@ -138,7 +145,7 @@ export default SelectKitComponent.extend({
       return !computedValues.includes(get(c, "value"));
     });
 
-    if (this.get("shouldFilter")) {
+    if (this.shouldFilter) {
       computedContent = this.filterComputedContent(
         computedContent,
         computedValues,
@@ -146,8 +153,8 @@ export default SelectKitComponent.extend({
       );
     }
 
-    if (this.get("limitMatches")) {
-      return computedContent.slice(0, this.get("limitMatches"));
+    if (this.limitMatches) {
+      return computedContent.slice(0, this.limitMatches);
     }
 
     return computedContent;
@@ -155,22 +162,19 @@ export default SelectKitComponent.extend({
 
   computeHeaderContent() {
     let content = {
-      title: this.get("title"),
-      selection: this.get("selection")
+      title: this.title,
+      selection: this.selection
     };
 
-    if (this.get("noneLabel")) {
-      if (!this.get("hasSelection")) {
-        content.title = content.name = content.label = I18n.t(
-          this.get("noneLabel")
-        );
+    if (this.noneLabel) {
+      if (!this.hasSelection) {
+        content.title = content.name = content.label = I18n.t(this.noneLabel);
       }
     } else {
-      if (!this.get("hasReachedMinimum")) {
-        const key =
-          this.get("minimumLabel") || "select_kit.min_content_not_reached";
+      if (!this.hasReachedMinimum) {
+        const key = this.minimumLabel || "select_kit.min_content_not_reached";
         content.title = content.name = content.label = I18n.t(key, {
-          count: this.get("minimum")
+          count: this.minimum
         });
       }
     }
@@ -188,7 +192,7 @@ export default SelectKitComponent.extend({
   },
 
   validateSelect() {
-    return this._super() && !this.get("hasReachedMaximum");
+    return this._super() && !this.hasReachedMaximum;
   },
 
   @computed("computedValues.[]", "computedContent.[]")
@@ -209,16 +213,16 @@ export default SelectKitComponent.extend({
   },
 
   didPressTab(event) {
-    if (isEmpty(this.get("filter")) && !this.get("highlighted")) {
+    if (isEmpty(this.filter) && !this.highlighted) {
       this.$header().focus();
       this.close(event);
       return true;
     }
 
-    if (this.get("highlighted") && this.get("isExpanded")) {
+    if (this.highlighted && this.isExpanded) {
       this._destroyEvent(event);
       this.focus();
-      this.select(this.get("highlighted"));
+      this.select(this.highlighted);
       return false;
     } else {
       this.close(event);
@@ -229,18 +233,15 @@ export default SelectKitComponent.extend({
 
   autoHighlight() {
     run.schedule("afterRender", () => {
-      if (!this.get("isExpanded")) return;
-      if (!this.get("renderedBodyOnce")) return;
-      if (this.get("highlighted")) return;
+      if (!this.isExpanded) return;
+      if (!this.renderedBodyOnce) return;
+      if (this.highlighted) return;
 
-      if (isEmpty(this.get("collectionComputedContent"))) {
-        if (this.get("createRowComputedContent")) {
-          this.highlight(this.get("createRowComputedContent"));
-        } else if (
-          this.get("noneRowComputedContent") &&
-          this.get("hasSelection")
-        ) {
-          this.highlight(this.get("noneRowComputedContent"));
+      if (isEmpty(this.collectionComputedContent)) {
+        if (this.createRowComputedContent) {
+          this.highlight(this.createRowComputedContent);
+        } else if (this.noneRowComputedContent && this.hasSelection) {
+          this.highlight(this.noneRowComputedContent);
         }
       } else {
         this.highlight(this.get("collectionComputedContent.firstObject"));
@@ -253,24 +254,32 @@ export default SelectKitComponent.extend({
       !computedContentItem ||
       computedContentItem.__sk_row_type === "noneRow"
     ) {
-      applyOnSelectNonePluginApiCallbacks(
-        this.get("pluginApiIdentifiers"),
-        this
-      );
+      applyOnSelectNonePluginApiCallbacks(this.pluginApiIdentifiers, this);
       this._boundaryActionHandler("onSelectNone");
       this.clearSelection();
       return;
     }
 
+    if (computedContentItem.__sk_row_type === "noopRow") {
+      applyOnSelectPluginApiCallbacks(
+        this.pluginApiIdentifiers,
+        computedContentItem.value,
+        this
+      );
+
+      this._boundaryActionHandler("onSelect", computedContentItem.value);
+      return;
+    }
+
     if (computedContentItem.__sk_row_type === "createRow") {
       if (
-        !this.get("computedValues").includes(computedContentItem.value) &&
+        !this.computedValues.includes(computedContentItem.value) &&
         this.validateCreate(computedContentItem.value)
       ) {
         this.willCreate(computedContentItem);
 
         computedContentItem.__sk_row_type = null;
-        this.get("computedContent").pushObject(computedContentItem);
+        this.computedContent.pushObject(computedContentItem);
 
         run.schedule("afterRender", () => {
           this.didCreate(computedContentItem);
@@ -289,7 +298,7 @@ export default SelectKitComponent.extend({
       this.willSelect(computedContentItem);
       this.clearFilter();
       this.setProperties({ highlighted: null });
-      this.get("computedValues").pushObject(computedContentItem.value);
+      this.computedValues.pushObject(computedContentItem.value);
 
       run.next(() => this.mutateAttributes());
 
@@ -297,7 +306,7 @@ export default SelectKitComponent.extend({
         this.didSelect(computedContentItem);
 
         applyOnSelectPluginApiCallbacks(
-          this.get("pluginApiIdentifiers"),
+          this.pluginApiIdentifiers,
           computedContentItem.value,
           this
         );
@@ -313,20 +322,31 @@ export default SelectKitComponent.extend({
 
   deselect(rowComputedContentItems) {
     this.willDeselect(rowComputedContentItems);
+
     rowComputedContentItems = makeArray(rowComputedContentItems);
     const generatedComputedContents = this._filterRemovableComputedContents(
       makeArray(rowComputedContentItems)
     );
-    this.set("highlighted", null);
-    this.set("highlightedSelection", []);
-    this.get("computedValues").removeObjects(
+    this.setProperties({ highlighted: null, highlightedSelection: [] });
+    this.computedValues.removeObjects(
       rowComputedContentItems.map(r => r.value)
     );
-    this.get("computedContent").removeObjects(generatedComputedContents);
-    run.next(() => this.mutateAttributes());
-    run.schedule("afterRender", () => {
-      this.didDeselect(rowComputedContentItems);
-      this.autoHighlight();
+    this.computedContent.removeObjects([
+      ...rowComputedContentItems,
+      ...generatedComputedContents
+    ]);
+
+    run.next(() => {
+      this.mutateAttributes();
+
+      run.schedule("afterRender", () => {
+        this.didDeselect(rowComputedContentItems);
+        this.autoHighlight();
+
+        if (!this.isDestroying && !this.isDestroyed) {
+          this._positionWrapper();
+        }
+      });
     });
   },
 

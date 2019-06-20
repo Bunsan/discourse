@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'active_record/connection_adapters/abstract_adapter'
 require 'active_record/connection_adapters/postgresql_adapter'
 require 'discourse'
@@ -16,10 +18,14 @@ class PostgreSQLFallbackHandler
     @mutex = Mutex.new
     @initialized = false
 
-    MessageBus.subscribe(DATABASE_DOWN_CHANNEL) do |payload, pid|
-      if @initialized && pid != Process.pid
-        RailsMultisite::ConnectionManagement.with_connection(payload.data['db']) do
-          clear_connections
+    MessageBus.subscribe(DATABASE_DOWN_CHANNEL) do |payload|
+      if @initialized && payload.data["pid"].to_i != Process.pid
+        begin
+          RailsMultisite::ConnectionManagement.with_connection(payload.data['db']) do
+            clear_connections
+          end
+        rescue PG::UnableToSend
+          # Site has already failed over
         end
       end
     end
@@ -48,7 +54,7 @@ class PostgreSQLFallbackHandler
   def master_down
     synchronize do
       @masters_down[namespace] = true
-      Sidekiq.pause! if !Sidekiq.paused?
+      Sidekiq.pause!("pg_failover") if !Sidekiq.paused?
       MessageBus.publish(DATABASE_DOWN_CHANNEL, db: namespace, pid: Process.pid)
     end
   end
@@ -68,6 +74,8 @@ class PostgreSQLFallbackHandler
         RailsMultisite::ConnectionManagement.with_connection(key) do
           begin
             logger.warn "#{log_prefix}: Checking master server..."
+            is_connection_active = false
+
             begin
               connection = ActiveRecord::Base.postgresql_connection(config)
               is_connection_active = connection.active?
@@ -78,9 +86,9 @@ class PostgreSQLFallbackHandler
             if is_connection_active
               logger.warn "#{log_prefix}: Master server is active. Reconnecting..."
               self.master_up(key)
+              clear_connections
               disable_readonly_mode
               Sidekiq.unpause!
-              clear_connections
             end
           rescue => e
             logger.warn "#{log_prefix}: Connection to master PostgreSQL server failed with '#{e.message}'"
@@ -99,7 +107,7 @@ class PostgreSQLFallbackHandler
   end
 
   def clear_connections
-    ActiveRecord::Base.connection_pool.disconnect!
+    ActiveRecord::Base.clear_all_connections!
   end
 
   private
@@ -132,6 +140,7 @@ end
 module ActiveRecord
   module ConnectionHandling
     def postgresql_fallback_connection(config)
+      return postgresql_connection(config) if ARGV.include?("db:migrate")
       fallback_handler = ::PostgreSQLFallbackHandler.instance
       config = config.symbolize_keys
 
@@ -150,7 +159,6 @@ module ActiveRecord
           if !fallback_handler.initialized
             return postgresql_fallback_connection(config)
           else
-            fallback_handler.clear_connections
             raise e
           end
         end

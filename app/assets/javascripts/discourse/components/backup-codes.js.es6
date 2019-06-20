@@ -23,7 +23,7 @@ export default Ember.Component.extend({
   },
 
   didRender() {
-    this._super();
+    this._super(...arguments);
 
     const $backupCodes = this.$("#backupCodes");
     if ($backupCodes.length) {
@@ -44,13 +44,13 @@ export default Ember.Component.extend({
   actions: {
     copyToClipboard() {
       this._selectAllBackupCodes();
-      this.get("copyBackupCode")(document.execCommand("copy"));
+      this.copyBackupCode(document.execCommand("copy"));
     }
   },
 
   _selectAllBackupCodes() {
     const $textArea = this.$("#backupCodes");
     $textArea[0].focus();
-    $textArea[0].setSelectionRange(0, this.get("formattedBackupCodes").length);
+    $textArea[0].setSelectionRange(0, this.formattedBackupCodes.length);
   }
 });

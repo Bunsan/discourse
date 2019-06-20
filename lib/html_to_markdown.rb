@@ -1,9 +1,13 @@
+# frozen_string_literal: true
+
 require "nokogiri"
 
 class HtmlToMarkdown
 
   class Block < Struct.new(:name, :head, :body, :opened, :markdown)
-    def initialize(name, head = "", body = "", opened = false, markdown = ""); super; end
+    def initialize(name, head = "", body = "", opened = false, markdown = +"")
+      super
+    end
   end
 
   def initialize(html, opts = {})
@@ -14,8 +18,10 @@ class HtmlToMarkdown
   end
 
   # If a `<div>` is within a `<span>` that's invalid, so let's hoist the `<div>` up
+  INLINE_ELEMENTS ||= %w{span font}
+  BLOCK_ELEMENTS ||= %w{div p}
   def fix_span_elements(node)
-    if node.name == 'span' && node.at('div')
+    if (INLINE_ELEMENTS.include?(node.name) && BLOCK_ELEMENTS.any? { |e| node.at(e) })
       node.swap(node.children)
     end
 
@@ -30,6 +36,7 @@ class HtmlToMarkdown
         node.content = node.content.gsub(/\A[[:space:]]+/, "") if node.previous_element.nil? && node.parent.description&.block?
         node.content = node.content.gsub(/[[:space:]]+\z/, "") if node.next_element&.description&.block?
         node.content = node.content.gsub(/[[:space:]]+\z/, "") if node.next_element.nil? && node.parent.description&.block?
+        node.content = node.content.gsub(/\r\n?/, "\n")
         node.remove if node.content.empty?
       end
     end
@@ -37,10 +44,12 @@ class HtmlToMarkdown
 
   def to_markdown
     @stack = [Block.new("root")]
-    @markdown = ""
+    @markdown = +""
     traverse(@doc)
     @markdown << format_block
-    @markdown.gsub(/\n{3,}/, "\n\n").strip
+    @markdown.gsub!(/\n{3,}/, "\n\n")
+    @markdown.strip!
+    @markdown
   end
 
   def traverse(node)
@@ -53,7 +62,7 @@ class HtmlToMarkdown
     if node.description&.block? && node.parent&.description&.block? && @stack[-1].markdown.size > 0
       block = @stack[-1].dup
       @markdown << format_block
-      block.markdown = ""
+      block.markdown = +""
       block.opened = true
       @stack << block
     end
@@ -76,7 +85,7 @@ class HtmlToMarkdown
     code_class = code ? code["class"] : ""
     lang = code_class ? code_class[/lang-(\w+)/, 1] : ""
     pre = Block.new("pre")
-    pre.markdown = "```#{lang}\n"
+    pre.markdown = +"```#{lang}\n"
     @stack << pre
     traverse(node)
     pre.markdown << "\n```\n"
@@ -180,6 +189,7 @@ class HtmlToMarkdown
 
   def visit_br(node)
     return if node.previous_sibling.nil? && EMPHASIS.include?(node.parent.name)
+    return if node.parent.name == "p" && (node.next_sibling&.text || "").start_with?("\n")
     @stack[-1].markdown << "\n"
   end
 
@@ -198,7 +208,7 @@ class HtmlToMarkdown
         @stack[-1].markdown << " " if node.text[0] == " "
         @stack[-1].markdown << delimiter
         traverse(node)
-        @stack[-1].markdown.chomp!
+        @stack[-1].markdown.gsub!(/\n+$/, "")
         if @stack[-1].markdown[-1] == " "
           @stack[-1].markdown.chomp!(" ")
           append_space = true

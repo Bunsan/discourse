@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'notification_levels'
 
 class CategoryUser < ActiveRecord::Base
@@ -97,7 +99,7 @@ class CategoryUser < ActiveRecord::Base
     builder.exec(
       tracking: notification_levels[:tracking],
       regular: notification_levels[:regular],
-      auto_track_category:  TopicUser.notification_reasons[:auto_track_category]
+      auto_track_category: TopicUser.notification_reasons[:auto_track_category]
     )
   end
 
@@ -157,7 +159,7 @@ class CategoryUser < ActiveRecord::Base
       watching: notification_levels[:watching],
       tracking: notification_levels[:tracking],
       regular: notification_levels[:regular],
-      auto_watch_category:  TopicUser.notification_reasons[:auto_watch_category]
+      auto_watch_category: TopicUser.notification_reasons[:auto_watch_category]
     )
 
   end

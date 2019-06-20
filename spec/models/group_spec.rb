@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 describe Group do
@@ -221,9 +223,24 @@ describe Group do
   end
 
   describe '.refresh_automatic_group!' do
-    it "makes sure the everyone group is not visible" do
+
+    it "does not include staged users in any automatic groups" do
+      staged = Fabricate(:staged, trust_level: 1)
+
+      Group.refresh_automatic_group!(:trust_level_0)
+      Group.refresh_automatic_group!(:trust_level_1)
+
+      expect(GroupUser.where(user_id: staged.id).count).to eq(0)
+
+      staged.unstage
+      staged.save!
+
+      expect(GroupUser.where(user_id: staged.id).count).to eq(2)
+    end
+
+    it "makes sure the everyone group is not visible except to staff" do
       g = Group.refresh_automatic_group!(:everyone)
-      expect(g.visibility_level).to eq(Group.visibility_levels[:owners])
+      expect(g.visibility_level).to eq(Group.visibility_levels[:staff])
     end
 
     it "ensures that the moderators group is messageable by all" do
@@ -236,7 +253,6 @@ describe Group do
 
     it "does not reset the localized name" do
       begin
-        default_locale = SiteSetting.default_locale
         I18n.locale = SiteSetting.default_locale = 'fi'
 
         group = Group.find(Group::AUTO_GROUPS[:everyone])
@@ -251,40 +267,42 @@ describe Group do
         Group.refresh_automatic_group!(:everyone)
 
         expect(group.reload.name).to eq(I18n.t("groups.default_names.everyone"))
-      ensure
-        I18n.locale = SiteSetting.default_locale = default_locale
       end
     end
 
     it "uses the localized name if name has not been taken" do
       begin
-        default_locale = SiteSetting.default_locale
         I18n.locale = SiteSetting.default_locale = 'de'
 
         group = Group.refresh_automatic_group!(:staff)
 
         expect(group.name).to_not eq('staff')
         expect(group.name).to eq(I18n.t('groups.default_names.staff'))
-      ensure
-        I18n.locale = SiteSetting.default_locale = default_locale
       end
     end
 
     it "does not use the localized name if name has already been taken" do
       begin
-        default_locale = SiteSetting.default_locale
         I18n.locale = SiteSetting.default_locale = 'de'
 
-        _another_group = Fabricate(:group,
-          name: I18n.t('groups.default_names.staff').upcase
-        )
-
+        Fabricate(:group, name: I18n.t('groups.default_names.staff').upcase)
         group = Group.refresh_automatic_group!(:staff)
-
         expect(group.name).to eq('staff')
-      ensure
-        I18n.locale = SiteSetting.default_locale = default_locale
+
+        Fabricate(:user, username: I18n.t('groups.default_names.moderators').upcase)
+        group = Group.refresh_automatic_group!(:moderators)
+        expect(group.name).to eq('moderators')
       end
+    end
+
+    it "always uses the default locale" do
+      SiteSetting.default_locale = "de"
+      I18n.locale = "en"
+
+      group = Group.refresh_automatic_group!(:staff)
+
+      expect(group.name).to_not eq('staff')
+      expect(group.name).to eq(I18n.t('groups.default_names.staff', locale: "de"))
     end
   end
 
@@ -435,8 +453,8 @@ describe Group do
   end
 
   describe 'destroy' do
-    let(:user) { Fabricate(:user) }
-    let(:group) { Fabricate(:group, users: [user]) }
+    fab!(:user) { Fabricate(:user) }
+    fab!(:group) { Fabricate(:group, users: [user]) }
 
     before do
       group.add(user)
@@ -513,7 +531,7 @@ describe Group do
   end
 
   context "group management" do
-    let(:group) { Fabricate(:group) }
+    fab!(:group) { Fabricate(:group) }
 
     it "by default has no managers" do
       expect(group.group_users.where('group_users.owner')).to be_empty
@@ -549,15 +567,15 @@ describe Group do
     end
 
     describe 'when a user has qualified for trust level 1' do
-      let(:user) do
+      fab!(:user) do
         Fabricate(:user,
           trust_level: 1,
           created_at: Time.zone.now - 10.years
         )
       end
 
-      let(:group) { Fabricate(:group, grant_trust_level: 1) }
-      let(:group2) { Fabricate(:group, grant_trust_level: 0) }
+      fab!(:group) { Fabricate(:group, grant_trust_level: 1) }
+      fab!(:group2) { Fabricate(:group, grant_trust_level: 0) }
 
       before do
         user.user_stat.update!(
@@ -588,37 +606,41 @@ describe Group do
 
       # Add a group without one to consider `NULL` check
       g2.add(user)
-      expect(user.group_locked_trust_level).to be_nil
+      expect(user.group_granted_trust_level).to be_nil
       expect(user.manual_locked_trust_level).to be_nil
 
       g0.add(user)
       expect(user.reload.trust_level).to eq(2)
-      expect(user.group_locked_trust_level).to eq(2)
+      expect(user.group_granted_trust_level).to eq(2)
       expect(user.manual_locked_trust_level).to be_nil
 
       g1.add(user)
       expect(user.reload.trust_level).to eq(3)
-      expect(user.group_locked_trust_level).to eq(3)
+      expect(user.group_granted_trust_level).to eq(3)
       expect(user.manual_locked_trust_level).to be_nil
 
       g1.remove(user)
       expect(user.reload.trust_level).to eq(2)
-      expect(user.group_locked_trust_level).to eq(2)
+      expect(user.group_granted_trust_level).to eq(2)
       expect(user.manual_locked_trust_level).to be_nil
 
       g0.remove(user)
       user.reload
       expect(user.manual_locked_trust_level).to be_nil
-      expect(user.group_locked_trust_level).to be_nil
+      expect(user.group_granted_trust_level).to be_nil
       expect(user.trust_level).to eq(0)
     end
   end
 
   it 'should cook the bio' do
     group = Fabricate(:group)
-    group.update_attributes!(bio_raw: 'This is a group for :unicorn: lovers')
+    group.update!(bio_raw: 'This is a group for :unicorn: lovers')
 
     expect(group.bio_cooked).to include("unicorn.png")
+
+    group.update!(bio_raw: '')
+
+    expect(group.bio_cooked).to eq(nil)
   end
 
   describe ".visible_groups" do
@@ -710,15 +732,20 @@ describe Group do
     end
 
     it "always sets user's primary group" do
-      group.update(primary_group: true)
+      group.update(primary_group: true, title: 'AAAA')
       expect { group.add(user) }.to change { user.reload.primary_group }.from(nil).to(group)
 
-      new_group = Fabricate(:group, primary_group: true)
-      expect { new_group.add(user) }.to change { user.reload.primary_group }.from(group).to(new_group)
+      new_group = Fabricate(:group, primary_group: true, title: 'BBBB')
+
+      expect {
+        new_group.add(user)
+        user.reload
+      }.to change { user.primary_group }.from(group).to(new_group)
+        .and change { user.title }.from('AAAA').to('BBBB')
     end
 
     context 'when adding a user into a public group' do
-      let(:category) { Fabricate(:category) }
+      fab!(:category) { Fabricate(:category) }
 
       it "should publish the group's categories to the client" do
         group.update!(public_admission: true, categories: [category])
@@ -747,7 +774,7 @@ describe Group do
   end
 
   describe '.search_groups' do
-    let(:group) { Fabricate(:group, name: 'tEsT_more_things', full_name: 'Abc something awesome') }
+    fab!(:group) { Fabricate(:group, name: 'tEsT_more_things', full_name: 'Abc something awesome') }
 
     it 'should return the right groups' do
       group
@@ -818,6 +845,33 @@ describe Group do
 
         expect(job["args"].first["group_id"]).to eq(group.id)
       end
+    end
+  end
+
+  it "allows Font Awesome 4.7 syntax as group avatar flair" do
+    group = Fabricate(:group)
+    group.flair_url = "fa-air-freshener"
+    group.save
+
+    group = Group.find(group.id)
+    expect(group.flair_url).to eq("fa-air-freshener")
+  end
+
+  it "allows Font Awesome 5 syntax as group avatar flair" do
+    group = Fabricate(:group)
+    group.flair_url = "fab fa-bandcamp"
+    group.save
+
+    group = Group.find(group.id)
+    expect(group.flair_url).to eq("fab fa-bandcamp")
+  end
+
+  context "Unicode usernames and group names" do
+    before { SiteSetting.unicode_usernames = true }
+
+    it "should normalize the name" do
+      group = Fabricate(:group, name: "Bücherwurm") # NFD
+      expect(group.name).to eq("Bücherwurm") # NFC
     end
   end
 end

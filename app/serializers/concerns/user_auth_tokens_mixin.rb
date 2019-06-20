@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_dependency 'browser_detection'
 require_dependency 'discourse_ip_info'
 
@@ -20,12 +22,8 @@ module UserAuthTokensMixin
   end
 
   def location
-    ipinfo = DiscourseIpInfo.get(client_ip)
-
-    location = [ipinfo[:city], ipinfo[:region], ipinfo[:country]].reject { |x| x.blank? }.join(", ")
-    return I18n.t('staff_action_logs.unknown') if location.blank?
-
-    location
+    ipinfo = DiscourseIpInfo.get(client_ip, locale: I18n.locale)
+    ipinfo[:location].presence || I18n.t('staff_action_logs.unknown')
   end
 
   def browser
@@ -46,13 +44,15 @@ module UserAuthTokensMixin
   def icon
     case BrowserDetection.os(object.user_agent)
     when :android
-      'android'
+      'fab-android'
+    when :chromeos
+      'fab-chrome'
     when :macos, :ios
-      'apple'
+      'fab-apple'
     when :linux
-      'linux'
+      'fab-linux'
     when :windows
-      'windows'
+      'fab-windows'
     else
       'question'
     end

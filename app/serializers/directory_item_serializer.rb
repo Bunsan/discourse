@@ -1,9 +1,15 @@
+# frozen_string_literal: true
+
 class DirectoryItemSerializer < ApplicationSerializer
+
+  class UserSerializer < UserNameSerializer
+    include UserPrimaryGroupMixin
+  end
 
   attributes :id,
              :time_read
 
-  has_one :user, embed: :objects, serializer: UserNameSerializer
+  has_one :user, embed: :objects, serializer: UserSerializer
   attributes *DirectoryItem.headings
 
   def id

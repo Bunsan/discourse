@@ -3,39 +3,61 @@ import DiscourseURL from "discourse/lib/url";
 import { default as computed } from "ember-addons/ember-computed-decorators";
 import Category from "discourse/models/category";
 import { categoryBadgeHTML } from "discourse/helpers/category-link";
+const { isEmpty } = Ember;
 
 export default ComboBoxComponent.extend({
   pluginApiIdentifiers: ["category-drop"],
   classNameBindings: ["categoryStyle"],
   classNames: "category-drop",
   verticalOffset: 3,
-  content: Ember.computed.alias("categories"),
+  content: Ember.computed.alias("categoriesWithShortcuts"),
   rowComponent: "category-row",
   headerComponent: "category-drop/category-drop-header",
   allowAutoSelectFirst: false,
   tagName: "li",
   categoryStyle: Ember.computed.alias("siteSettings.category_style"),
   noCategoriesLabel: I18n.t("categories.no_subcategory"),
-  mutateAttributes() {},
   fullWidthOnMobile: true,
   caretDownIcon: "caret-right",
   caretUpIcon: "caret-down",
   subCategory: false,
+  isAsync: Ember.computed.not("subCategory"),
+
+  @computed("categories", "hasSelection", "subCategory", "noSubcategories")
+  categoriesWithShortcuts(
+    categories,
+    hasSelection,
+    subCategory,
+    noSubcategories
+  ) {
+    const shortcuts = [];
+
+    if (hasSelection || (noSubcategories && subCategory)) {
+      shortcuts.push({
+        name: this.allCategoriesLabel,
+        __sk_row_type: "noopRow",
+        id: "all-categories"
+      });
+    }
+
+    if (subCategory && (hasSelection || !noSubcategories)) {
+      shortcuts.push({
+        name: this.noCategoriesLabel,
+        __sk_row_type: "noopRow",
+        id: "no-categories"
+      });
+    }
+
+    return shortcuts.concat(categories);
+  },
 
   init() {
-    this._super();
+    this._super(...arguments);
 
-    if (this.get("category")) {
-      this.set("value", this.get("category.id"));
-    } else {
-      this.set("value", null);
-    }
-    if (!this.get("categories")) this.set("categories", []);
-
-    this.get("rowComponentOptions").setProperties({
-      hideParentCategory: this.get("subCategory"),
+    this.rowComponentOptions.setProperties({
+      hideParentCategory: this.subCategory,
       allowUncategorized: true,
-      countSubcategories: this.get("countSubcategories"),
+      countSubcategories: this.countSubcategories,
       displayCategoryDescription: !(
         this.currentUser &&
         (this.currentUser.get("staff") || this.currentUser.trust_level > 0)
@@ -43,54 +65,24 @@ export default ComboBoxComponent.extend({
     });
   },
 
-  @computed("content")
-  filterable(content) {
-    return content && content.length >= 15;
+  didReceiveAttrs() {
+    if (!this.categories) this.set("categories", []);
+    this.forceValue(this.get("category.id"));
   },
 
-  @computed(
-    "allCategoriesUrl",
-    "allCategoriesLabel",
-    "noCategoriesUrl",
-    "noCategoriesLabel"
-  )
-  collectionHeader(
-    allCategoriesUrl,
-    allCategoriesLabel,
-    noCategoriesUrl,
-    noCategoriesLabel
-  ) {
-    let shortcuts = "";
-
-    if (
-      this.get("hasSelection") ||
-      (this.get("noSubcategories") && this.get("subCategory"))
-    ) {
-      shortcuts += `
-        <a href="${allCategoriesUrl}" class="category-filter">
-          ${allCategoriesLabel}
-        </a>
-      `;
-    }
-
-    if (
-      this.get("subCategory") &&
-      (this.get("hasSelection") || !this.get("noSubcategories"))
-    ) {
-      shortcuts += `
-        <a href="${noCategoriesUrl}" class="category-filter">
-          ${noCategoriesLabel}
-        </a>
-      `;
-    }
-
-    return shortcuts.htmlSafe();
+  @computed("content")
+  filterable(content) {
+    const contentLength = (content && content.length) || 0;
+    return (
+      contentLength >= 15 ||
+      (this.isAsync && contentLength < Discourse.Category.list().length)
+    );
   },
 
   computeHeaderContent() {
-    let content = this._super();
+    let content = this._super(...arguments);
 
-    if (this.get("hasSelection")) {
+    if (this.hasSelection) {
       const category = Category.findById(content.value);
       content.title = category.title;
       content.label = categoryBadgeHTML(category, {
@@ -99,16 +91,16 @@ export default ComboBoxComponent.extend({
         hideParent: true
       }).htmlSafe();
     } else {
-      if (this.get("noSubcategories")) {
+      if (this.noSubcategories) {
         content.label = `<span class="category-name">${this.get(
           "noCategoriesLabel"
         )}</span>`;
-        content.title = this.get("noCategoriesLabel");
+        content.title = this.noCategoriesLabel;
       } else {
         content.label = `<span class="category-name">${this.get(
           "allCategoriesLabel"
         )}</span>`;
-        content.title = this.get("allCategoriesLabel");
+        content.title = this.allCategoriesLabel;
       }
     }
 
@@ -125,20 +117,70 @@ export default ComboBoxComponent.extend({
 
   @computed("parentCategory.url", "subCategory")
   allCategoriesUrl(parentCategoryUrl, subCategory) {
-    return subCategory ? parentCategoryUrl || "/" : "/";
+    return Discourse.getURL(subCategory ? parentCategoryUrl || "/" : "/");
   },
 
   @computed("parentCategory.url")
   noCategoriesUrl(parentCategoryUrl) {
-    return `${parentCategoryUrl}/none`;
+    return Discourse.getURL(`${parentCategoryUrl}/none`);
   },
 
   actions: {
     onSelect(categoryId) {
-      const category = Category.findById(parseInt(categoryId, 10));
-      const categoryURL =
-        Discourse.getURL("/c/") + Discourse.Category.slugFor(category);
+      let categoryURL;
+
+      if (categoryId === "all-categories") {
+        categoryURL = Discourse.getURL(this.allCategoriesUrl);
+      } else if (categoryId === "no-categories") {
+        categoryURL = Discourse.getURL(this.noCategoriesUrl);
+      } else {
+        const category = Category.findById(parseInt(categoryId, 10));
+        const slug = Discourse.Category.slugFor(category);
+        categoryURL = Discourse.getURL("/c/") + slug;
+      }
+
       DiscourseURL.routeTo(categoryURL);
+    },
+
+    onExpand() {
+      if (this.isAsync && isEmpty(this.asyncContent)) {
+        this.set("asyncContent", this.content);
+      }
+    },
+
+    onFilter(filter) {
+      if (!this.isAsync) {
+        return;
+      }
+
+      if (isEmpty(filter)) {
+        this.set("asyncContent", this.content);
+        return;
+      }
+
+      let results = Discourse.Category.search(filter);
+
+      if (!this.siteSettings.allow_uncategorized_topics) {
+        results = results.filter(result => {
+          return (
+            result.id !==
+            Discourse.Site.currentProp("uncategorized_category_id")
+          );
+        });
+      }
+
+      results = results.sort((a, b) => {
+        if (a.parent_category_id && !b.parent_category_id) {
+          return 1;
+        } else if (!a.parent_category_id && b.parent_category_id) {
+          return -1;
+        } else {
+          return 0;
+        }
+      });
+
+      this.set("asyncContent", results);
+      this.autoHighlight();
     }
   }
 });

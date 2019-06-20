@@ -9,6 +9,11 @@ export default RestModel.extend({
     return saving || Ember.isEmpty(name) || Ember.isEmpty(tagNames);
   },
 
+  @computed("id")
+  disableDelete(id) {
+    return !parseInt(id);
+  },
+
   @computed("permissions")
   permissionName: {
     get(permissions) {
@@ -41,8 +46,8 @@ export default RestModel.extend({
     this.set("savingStatus", I18n.t("saving"));
     this.set("saving", true);
 
-    const isNew = this.get("id") === "new";
-    const url = isNew ? "/tag_groups" : `/tag_groups/${this.get("id")}`;
+    const isNew = this.id === "new";
+    const url = isNew ? "/tag_groups" : `/tag_groups/${this.id}`;
     const data = this.getProperties(
       "name",
       "tag_names",
@@ -67,6 +72,6 @@ export default RestModel.extend({
   },
 
   destroy() {
-    return ajax(`/tag_groups/${this.get("id")}`, { type: "DELETE" });
+    return ajax(`/tag_groups/${this.id}`, { type: "DELETE" });
   }
 });

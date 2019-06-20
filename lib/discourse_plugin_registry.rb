@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 #  A class that handles interaction between a plugin and the Discourse App.
 #
@@ -15,6 +17,7 @@ class DiscoursePluginRegistry
     attr_writer :handlebars
     attr_writer :serialized_current_user_fields
     attr_writer :seed_data
+    attr_writer :svg_icons
     attr_writer :locales
     attr_accessor :custom_html
 
@@ -57,6 +60,10 @@ class DiscoursePluginRegistry
 
     def sass_variables
       @sass_variables ||= Set.new
+    end
+
+    def svg_icons
+      @svg_icons ||= []
     end
 
     def handlebars
@@ -105,6 +112,10 @@ class DiscoursePluginRegistry
     self.service_workers << filename
   end
 
+  def self.register_svg_icon(icon)
+    self.svg_icons << icon
+  end
+
   def register_css(filename)
     self.class.stylesheets << filename
   end
@@ -139,7 +150,7 @@ class DiscoursePluginRegistry
     end
   end
 
-  JS_REGEX = /\.js$|\.js\.erb$|\.js\.es6$/
+  JS_REGEX = /\.js$|\.js\.erb$|\.js\.es6|\.js\.no-module\.es6$/
   HANDLEBARS_REGEX = /\.hbs$|\.js\.handlebars$/
 
   def self.register_asset(asset, opts = nil)
@@ -195,8 +206,8 @@ class DiscoursePluginRegistry
   end
 
   VENDORED_CORE_PRETTY_TEXT_MAP = {
-    "moment.js" => "lib/javascripts/moment.js",
-    "moment-timezone.js" => "lib/javascripts/moment-timezone-with-data.js"
+    "moment.js" => "vendor/assets/javascripts/moment.js",
+    "moment-timezone.js" => "vendor/assets/javascripts/moment-timezone-with-data.js"
   }
   def self.core_asset_for_name(name)
     asset = VENDORED_CORE_PRETTY_TEXT_MAP[name]

@@ -5,15 +5,15 @@ export default Ember.Mixin.create({
   rejectedPasswords: null,
 
   init() {
-    this._super();
+    this._super(...arguments);
     this.set("rejectedPasswords", []);
-    this.set("rejectedPasswordsMessages", Ember.Map.create());
+    this.set("rejectedPasswordsMessages", new Map());
   },
 
   @computed("passwordMinLength")
   passwordInstructions() {
     return I18n.t("user.password.instructions", {
-      count: this.get("passwordMinLength")
+      count: this.passwordMinLength
     });
   },
 
@@ -48,7 +48,7 @@ export default Ember.Mixin.create({
       return InputValidation.create({
         failed: true,
         reason:
-          this.get("rejectedPasswordsMessages").get(password) ||
+          this.rejectedPasswordsMessages.get(password) ||
           I18n.t("user.password.common")
       });
     }

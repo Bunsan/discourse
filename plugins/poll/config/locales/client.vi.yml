@@ -13,8 +13,6 @@ vi:
       total_votes:
         other: "tổng số bình chọn"
       average_rating: "Trung bình: <strong>%{average}</strong>."
-      public:
-        title: "Thăm dò công khai."
       multiple:
         help:
           at_least_min_options:
@@ -56,6 +54,8 @@ vi:
           regular: Một lựa chọn
           multiple: Nhiều lựa chọn
           number: Xếp hạng
+        poll_result:
+          label: Kết quả
         poll_config:
           max: Tối đa
           min: Tối thiểu

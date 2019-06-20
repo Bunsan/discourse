@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 def auth_token_for(user)
@@ -21,7 +23,7 @@ end
 
 describe Auth::GithubAuthenticator do
   let(:authenticator) { described_class.new }
-  let(:user) { Fabricate(:user) }
+  fab!(:user) { Fabricate(:user) }
 
   context 'after_authenticate' do
     let(:data) do
@@ -235,6 +237,8 @@ describe Auth::GithubAuthenticator do
       user1 = Fabricate(:user)
       user2 = Fabricate(:user)
 
+      expect(authenticator.can_connect_existing_user?).to eq(true)
+
       GithubUserInfo.create!(user_id: user1.id, github_user_id: 100, screen_name: "boris")
 
       result = authenticator.after_authenticate(data, existing_account: user2)
@@ -247,7 +251,7 @@ describe Auth::GithubAuthenticator do
   end
 
   context 'revoke' do
-    let(:user) { Fabricate(:user) }
+    fab!(:user) { Fabricate(:user) }
     let(:authenticator) { Auth::GithubAuthenticator.new }
 
     it 'raises exception if no entry for user' do
@@ -267,8 +271,8 @@ describe Auth::GithubAuthenticator do
     let(:job_klass) { Jobs::DownloadAvatarFromUrl }
 
     context 'when user has a custom avatar' do
-      let(:user_avatar) { Fabricate(:user_avatar, custom_upload: Fabricate(:upload)) }
-      let(:user_with_custom_avatar) { Fabricate(:user, user_avatar: user_avatar) }
+      fab!(:user_avatar) { Fabricate(:user_avatar, custom_upload: Fabricate(:upload)) }
+      fab!(:user_with_custom_avatar) { Fabricate(:user, user_avatar: user_avatar) }
 
       it 'does not enqueue a download_avatar_from_url job' do
         expect {

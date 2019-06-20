@@ -49,7 +49,7 @@ export default (filterArg, params) => {
       }
 
       this._setupNavigation(model.category);
-      return Em.RSVP.all([
+      return Ember.RSVP.all([
         this._createSubcategoryList(model.category),
         this._retrieveTopicList(model.category, transition)
       ]);
@@ -77,7 +77,7 @@ export default (filterArg, params) => {
     _createSubcategoryList(category) {
       this._categoryList = null;
       if (
-        Em.isNone(category.get("parentCategory")) &&
+        Ember.isNone(category.get("parentCategory")) &&
         category.get("show_subcategory_list")
       ) {
         return CategoryList.listForParent(this.store, category).then(
@@ -86,14 +86,14 @@ export default (filterArg, params) => {
       }
 
       // If we're not loading a subcategory list just resolve
-      return Em.RSVP.resolve();
+      return Ember.RSVP.resolve();
     },
 
     _retrieveTopicList(category, transition) {
       const listFilter = `c/${Discourse.Category.slugFor(
           category
         )}/l/${this.filter(category)}`,
-        findOpts = filterQueryParams(transition.queryParams, params),
+        findOpts = filterQueryParams(transition.to.queryParams, params),
         extras = { cached: this.isPoppedState(transition) };
 
       return findTopicList(
@@ -110,19 +110,27 @@ export default (filterArg, params) => {
     },
 
     titleToken() {
-      const category = this.currentModel.category,
-        filterText = I18n.t(
-          "filters." + this.filter(category).replace("/", ".") + ".title"
-        );
+      const category = this.currentModel.category;
+
+      const filterText = I18n.t(
+        "filters." + this.filter(category).replace("/", ".") + ".title"
+      );
+
+      let categoryName = category.name;
+      if (category.parent_category_id) {
+        const list = Category.list();
+        const parentCategory = list.findBy("id", category.parent_category_id);
+        categoryName = `${parentCategory.name}/${categoryName}`;
+      }
 
       return I18n.t("filters.with_category", {
         filter: filterText,
-        category: category.get("name")
+        category: categoryName
       });
     },
 
     setupController(controller, model) {
-      const topics = this.get("topics"),
+      const topics = this.topics,
         category = model.category,
         canCreateTopic = topics.get("can_create_topic"),
         canCreateTopicOnCategory =
@@ -185,7 +193,7 @@ export default (filterArg, params) => {
     },
 
     deactivate() {
-      this._super();
+      this._super(...arguments);
       this.searchService.set("searchContext", null);
     },
 

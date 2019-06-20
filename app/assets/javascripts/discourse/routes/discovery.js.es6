@@ -11,16 +11,16 @@ export default Discourse.Route.extend(OpenComposer, {
   },
 
   beforeModel(transition) {
+    const user = Discourse.User;
+    const url = transition.intent.url;
+
     if (
-      (transition.intent.url === "/" ||
-        transition.intent.url === "/latest" ||
-        transition.intent.url === "/categories") &&
+      (url === "/" || url === "/latest" || url === "/categories") &&
       transition.targetName.indexOf("discovery.top") === -1 &&
-      Discourse.User.currentProp("should_be_redirected_to_top")
+      user.currentProp("should_be_redirected_to_top")
     ) {
-      Discourse.User.currentProp("should_be_redirected_to_top", false);
-      const period =
-        Discourse.User.currentProp("redirect_to_top.period") || "all";
+      user.currentProp("should_be_redirected_to_top", false);
+      const period = user.currentProp("redirected_to_top.period") || "all";
       this.replaceWith(`discovery.top${period.capitalize()}`);
     }
   },
@@ -36,12 +36,13 @@ export default Discourse.Route.extend(OpenComposer, {
       if (!this.session.get("topicListScrollPosition")) {
         scrollTop();
       }
+      return false;
     },
 
     didTransition() {
       this.controllerFor("discovery")._showFooter();
       this.send("loadingComplete");
-      return true;
+      return false;
     },
 
     // clear a pinned topic

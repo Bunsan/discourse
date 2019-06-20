@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails_helper'
 
 def create_notification(user_id, resp_code, matcher)
@@ -9,7 +11,7 @@ def create_notification(user_id, resp_code, matcher)
       data: { message: 'tada' }.to_json
     }
   expect(response.status).to eq(resp_code)
-  expect(Notification.count).send(matcher, eq(notification_count))
+  expect(Notification.count).public_send(matcher, eq(notification_count))
 end
 
 def update_notification(topic_id, resp_code, matcher)
@@ -17,7 +19,7 @@ def update_notification(topic_id, resp_code, matcher)
   put "/notifications/#{notification.id}.json", params: { topic_id: topic_id }
   expect(response.status).to eq(resp_code)
   notification.reload
-  expect(notification.topic_id).send(matcher, eq(topic_id))
+  expect(notification.topic_id).public_send(matcher, eq(topic_id))
 end
 
 def delete_notification(resp_code, matcher)
@@ -25,7 +27,7 @@ def delete_notification(resp_code, matcher)
   notification_count = Notification.count
   delete "/notifications/#{notification.id}.json"
   expect(response.status).to eq(resp_code)
-  expect(Notification.count).send(matcher, eq(notification_count))
+  expect(Notification.count).public_send(matcher, eq(notification_count))
 end
 
 describe NotificationsController do
@@ -106,7 +108,7 @@ describe NotificationsController do
 
       describe '#update' do
         it "can't update notification" do
-          update_notification(8, 403, :to_not)
+          update_notification(Fabricate(:topic).id, 403, :to_not)
         end
       end
 
@@ -160,7 +162,7 @@ describe NotificationsController do
 
     describe '#update' do
       it "can't update notification" do
-        update_notification(8, 403, :to_not)
+        update_notification(Fabricate(:topic).id, 403, :to_not)
       end
     end
 

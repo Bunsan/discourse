@@ -11,9 +11,9 @@ export default CategoryChooserComponent.extend({
   permissionType: null,
 
   init() {
-    this._super();
+    this._super(...arguments);
 
-    this.get("rowComponentOptions").setProperties({
+    this.rowComponentOptions.setProperties({
       displayCategoryDescription: false
     });
   },

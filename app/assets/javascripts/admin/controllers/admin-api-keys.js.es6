@@ -1,9 +1,15 @@
 import ApiKey from "admin/models/api-key";
+import { default as computed } from "ember-addons/ember-computed-decorators";
 
 export default Ember.Controller.extend({
+  @computed("model.[]")
+  hasMasterKey(model) {
+    return !!model.findBy("user", null);
+  },
+
   actions: {
     generateMasterKey() {
-      ApiKey.generateMasterKey().then(key => this.get("model").pushObject(key));
+      ApiKey.generateMasterKey().then(key => this.model.pushObject(key));
     },
 
     regenerateKey(key) {
@@ -26,15 +32,10 @@ export default Ember.Controller.extend({
         I18n.t("yes_value"),
         result => {
           if (result) {
-            key.revoke().then(() => this.get("model").removeObject(key));
+            key.revoke().then(() => this.model.removeObject(key));
           }
         }
       );
     }
-  },
-
-  // Has a master key already been generated?
-  hasMasterKey: function() {
-    return !!this.get("model").findBy("user", null);
-  }.property("model.[]")
+  }
 });
